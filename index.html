@@ -709,7 +709,7 @@
   <div class="modal-overlay" id="modalWA">
     <div class="modal">
       <h3>Kirim ke WhatsApp</h3>
-      <p>Akan muncul share <strong>2 kali</strong>:<br>① teks laporan → ② semua foto/video.<br>Pilih <strong>WhatsApp</strong> dan chat yang sama dua kali agar urutannya rapi.</p>
+      <p>Pilih <strong>WhatsApp</strong>, lalu pilih chat/grup tujuan. Teks + semua foto/video dikirim sekali.</p>
       <div class="wa-preview" id="waPreviewText"></div>
       <div class="btn-group">
         <button class="btn btn-wa" onclick="openWhatsApp()">Kirim ke WhatsApp</button>
@@ -1275,34 +1275,29 @@
         return;
       }
 
-      // URUTAN RAPI di WA:
-      // 1) Kirim TEKS dulu
-      // 2) Lalu kirim semua FOTO/VIDEO
-      // User pilih WhatsApp 2x ke chat yang sama
+      // Kirim SEKALI saja (semua file + teks). Share 2x = Permission denied.
       try {
-        await navigator.share({ text: msg });
+        await navigator.share({ files: files, text: msg });
+        finishSent();
       } catch (err) {
         if (err && err.name === 'AbortError') {
           closeModal();
           return;
         }
-        alert('Gagal kirim teks. Buka di Google Chrome, coba lagi.');
-        closeModal();
-        return;
-      }
-
-      try {
-        await navigator.share({ files: files });
-        finishSent();
-      } catch (err2) {
-        if (err2 && err2.name === 'AbortError') {
-          alert('Teks sudah terkirim.\nFoto dibatalkan — lampirkan manual atau kirim lagi.');
+        try {
+          await navigator.share({ files: files });
+          finishSent();
+        } catch (err2) {
+          if (err2 && err2.name === 'AbortError') {
+            closeModal();
+            return;
+          }
+          const detail = (err && (err.name || err.message))
+            ? `\n\nDetail: ${err.name || ''} ${err.message || ''}`
+            : '';
+          alert('Gagal kirim ke WhatsApp.' + detail + '\n\nPastikan buka di Google Chrome (bukan dalam chat WA).');
           closeModal();
-          return;
         }
-        const detail = (err2 && (err2.message || err2.name)) ? `\n(${err2.name || ''} ${err2.message || ''})` : '';
-        alert('Teks sudah terkirim, foto/video gagal.' + detail + '\n\nLampirkan manual dari galeri di chat yang sama.');
-        closeModal();
       }
     }
 
