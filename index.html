@@ -709,7 +709,7 @@
   <div class="modal-overlay" id="modalWA">
     <div class="modal">
       <h3>Kirim ke WhatsApp</h3>
-      <p>Foto & video akan ikut dikirim (jika browser mendukung). Pilih <strong>WhatsApp</strong> di menu share, lalu pilih chat/grup tujuan.</p>
+      <p>Akan muncul share <strong>2 kali</strong>:<br>① teks laporan → ② semua foto/video.<br>Pilih <strong>WhatsApp</strong> dan chat yang sama dua kali agar urutannya rapi.</p>
       <div class="wa-preview" id="waPreviewText"></div>
       <div class="btn-group">
         <button class="btn btn-wa" onclick="openWhatsApp()">Kirim ke WhatsApp</button>
@@ -1001,29 +1001,50 @@
           return;
         }
 
-        // Batasi ukuran video ~50MB
-        if (isVideo && file.size > 50 * 1024 * 1024) {
-          alert('Ukuran video terlalu besar (maks. 50MB). Silakan rekam lebih singkat.');
+        // Maks video 20MB
+        if (isVideo && file.size > 20 * 1024 * 1024) {
+          alert('Ukuran video terlalu besar (maks. 20MB / ± 3 menit).\nRekam lebih singkat atau turunkan kualitas kamera.');
           return;
         }
 
-        // Simpan File asli untuk share ke WA
-        currentFiles[itemId].push(file);
-
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const dataUrl = e.target.result;
-          currentPhotos[itemId].push({
-            data: dataUrl,
-            type: isVideo ? 'video' : 'image',
-            name: file.name
-          });
-          renderPreviews(itemId);
-          markItemFilled(itemId);
-          updateProgress(document.getElementById('jabatan').value);
-          saveToStorage();
+        const acceptFile = () => {
+          currentFiles[itemId].push(file);
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            currentPhotos[itemId].push({
+              data: e.target.result,
+              type: isVideo ? 'video' : 'image',
+              name: file.name
+            });
+            renderPreviews(itemId);
+            markItemFilled(itemId);
+            updateProgress(document.getElementById('jabatan').value);
+            saveToStorage();
+          };
+          reader.readAsDataURL(file);
         };
-        reader.readAsDataURL(file);
+
+        // Cek durasi video (maks 3 menit = 180 detik)
+        if (isVideo) {
+          const url = URL.createObjectURL(file);
+          const vid = document.createElement('video');
+          vid.preload = 'metadata';
+          vid.onloadedmetadata = () => {
+            URL.revokeObjectURL(url);
+            if (vid.duration > 180) {
+              alert('Durasi video terlalu panjang (maks. 3 menit).\nRekam ulang lebih singkat.');
+              return;
+            }
+            acceptFile();
+          };
+          vid.onerror = () => {
+            URL.revokeObjectURL(url);
+            acceptFile(); // tetap terima jika metadata gagal dibaca
+          };
+          vid.src = url;
+        } else {
+          acceptFile();
+        }
       });
 
       // Reset input so same file can be re-selected
@@ -1254,46 +1275,34 @@
         return;
       }
 
-      // Coba share file + teks
+      // URUTAN RAPI di WA:
+      // 1) Kirim TEKS dulu
+      // 2) Lalu kirim semua FOTO/VIDEO
+      // User pilih WhatsApp 2x ke chat yang sama
       try {
-        const data = { files: files, text: msg };
-        // Beberapa browser wajib cek canShare
-        if (navigator.canShare && !navigator.canShare(data)) {
-          // Coba tanpa text
-          if (navigator.canShare({ files: files })) {
-            await navigator.share({ files: files });
-            finishSent();
-            return;
-          }
-          throw new Error('canShare=false (file tidak didukung browser ini)');
-        }
-        await navigator.share(data);
-        finishSent();
-        return;
+        await navigator.share({ text: msg });
       } catch (err) {
         if (err && err.name === 'AbortError') {
           closeModal();
           return;
         }
-        console.warn('Share gagal:', err);
+        alert('Gagal kirim teks. Buka di Google Chrome, coba lagi.');
+        closeModal();
+        return;
+      }
 
-        // Fallback: file saja
-        try {
-          await navigator.share({ files: files });
-          finishSent();
-          return;
-        } catch (err2) {
-          if (err2 && err2.name === 'AbortError') {
-            closeModal();
-            return;
-          }
-          const detail = (err && (err.message || err.name)) ? `\n\nDetail: ${err.name || ''} ${err.message || ''}` : '';
-          alert(
-            'Gagal mengirim foto/video ke WhatsApp.' + detail +
-            '\n\nCoba:\n1. Pakai Google Chrome\n2. Video dipendekkan (< 20 detik)\n3. Kirim ulang tanpa refresh halaman'
-          );
+      try {
+        await navigator.share({ files: files });
+        finishSent();
+      } catch (err2) {
+        if (err2 && err2.name === 'AbortError') {
+          alert('Teks sudah terkirim.\nFoto dibatalkan — lampirkan manual atau kirim lagi.');
           closeModal();
+          return;
         }
+        const detail = (err2 && (err2.message || err2.name)) ? `\n(${err2.name || ''} ${err2.message || ''})` : '';
+        alert('Teks sudah terkirim, foto/video gagal.' + detail + '\n\nLampirkan manual dari galeri di chat yang sama.');
+        closeModal();
       }
     }
 
