@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Laporan Tutup Cabang – KC Syahrul</title>
+  <style>
+    :root {
+      --bg: #f0f2f5;
+      --surface: #ffffff;
+      --surface2: #f8fafc;
+      --border: #e5e7eb;
+      --border-strong: #d1d5db;
+      --text: #111827;
+      --text2: #374151;
+      --muted: #6b7280;
+      --primary: #1d4ed8;
+      --primary-soft: #eff6ff;
+      --accent: #059669;
+      --accent-soft: #ecfdf5;
+      --wa: #22c55e;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --radius: 16px;
+      --radius-sm: 10px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 110px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .header {
+      background: var(--surface);
+      padding: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+
+    .header-accent {
+      height: 3px;
+      background: linear-gradient(90deg, #1d4ed8, #3b82f6, #60a5fa);
+    }
+
+    .header-inner {
+      padding: 16px 20px 14px;
+    }
+
+    .header h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--text);
+      line-height: 1.3;
+    }
+
+    .header .sub {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 2px;
+      font-weight: 500;
+    }
+
+    .date-display {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--primary);
+      background: var(--primary-soft);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      background: var(--surface);
+      padding: 4px;
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .tab {
+      flex: 1;
+      padding: 11px 8px;
+      text-align: center;
+      border-radius: 9px;
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--muted);
+      transition: all 0.2s ease;
+      border: none;
+      background: transparent;
+    }
+
+    .tab.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(29,78,216,0.25);
+    }
+
+    /* Card */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(0,0,0,0.03);
+    }
+
+    .card-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text2);
+      margin-bottom: 6px;
+    }
+
+    select, input[type="text"] {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.95rem;
+      background: var(--surface);
+      color: var(--text);
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
+
+    select:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(29,78,216,0.12);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 480px) {
+      .row { grid-template-columns: 1fr; }
+    }
+
+    /* Status */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .badge.complete {
+      background: var(--accent-soft);
+      color: #047857;
+    }
+
+    .badge.incomplete {
+      background: #fffbeb;
+      color: #b45309;
+    }
+
+    .badge.empty {
+      background: #f3f4f6;
+      color: var(--muted);
+    }
+
+    .progress-text {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .checklist-summary {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Items */
+    .item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .item {
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      background: var(--surface);
+      transition: all 0.2s ease;
+    }
+
+    .item.filled {
+      border-color: #6ee7b7;
+      background: var(--accent-soft);
+    }
+
+    .item-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .item-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      background: #f3f4f6;
+      color: var(--muted);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 700;
+      transition: all 0.2s;
+    }
+
+    .item.filled .item-num {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .item-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      flex: 1;
+      line-height: 1.4;
+      color: var(--text);
+    }
+
+    .item-note {
+      font-size: 0.73rem;
+      color: var(--muted);
+      margin-top: 3px;
+      line-height: 1.4;
+      font-weight: 400;
+    }
+
+    .file-input-wrap { position: relative; }
+
+    .file-input-wrap input[type="file"] {
+      position: absolute;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .file-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      border: 1.5px dashed var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--surface2);
+      color: var(--primary);
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .file-btn:active {
+      background: var(--primary-soft);
+      border-color: var(--primary);
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .preview-item {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      aspect-ratio: 1;
+      background: #e5e7eb;
+      box-shadow: var(--shadow);
+    }
+
+    .preview-item img,
+    .preview-item video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .preview-item .remove-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      background: rgba(17,24,39,0.7);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      backdrop-filter: blur(4px);
+    }
+
+    .sub-items {
+      margin-top: 6px;
+      padding-left: 12px;
+      border-left: 2.5px solid #bfdbfe;
+    }
+
+    .sub-item { margin-bottom: 12px; }
+    .sub-item:last-child { margin-bottom: 0; }
+    .sub-item label {
+      font-size: 0.8rem;
+      margin-bottom: 6px;
+      color: var(--text2);
+      font-weight: 550;
+    }
+
+    /* Buttons */
+    .btn-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 18px;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.92rem;
+      font-weight: 650;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: -0.01em;
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .btn:active:not(:disabled) {
+      transform: scale(0.98);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-wa {
+      background: var(--wa);
+      color: white;
+      box-shadow: 0 2px 8px rgba(34,197,94,0.3);
+    }
+
+    .btn-sent {
+      background: #d1fae5;
+      color: #047857;
+      border: 1.5px solid #6ee7b7;
+      cursor: default;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text2);
+      border: 1.5px solid var(--border);
+    }
+
+    .btn-danger {
+      background: #fef2f2;
+      color: var(--danger);
+      border: 1.5px solid #fecaca;
+      font-size: 0.85rem;
+      padding: 11px;
+      width: 100%;
+    }
+
+    /* Footer */
+    .footer-actions {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      z-index: 90;
+      display: flex;
+      gap: 10px;
+      max-width: 640px;
+      margin: 0 auto;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
+    }
+
+    .footer-actions .btn { flex: 1; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(17,24,39,0.4);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.show { display: flex; }
+
+    .modal {
+      background: var(--surface);
+      border-radius: 20px;
+      padding: 24px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 24px 48px rgba(0,0,0,0.15);
+      animation: modalIn 0.2s ease;
+    }
+
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.95) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal h3 {
+      margin-bottom: 6px;
+      color: var(--text);
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+
+    .modal p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .wa-preview {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 0.78rem;
+      text-align: left;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-bottom: 16px;
+      color: var(--text2);
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      line-height: 1.55;
+    }
+
+    /* Empty */
+    .empty-state {
+      text-align: center;
+      padding: 56px 24px;
+      color: var(--muted);
+    }
+
+    .empty-state svg {
+      width: 52px;
+      height: 52px;
+      margin-bottom: 14px;
+      opacity: 0.3;
+      stroke-width: 1.2;
+    }
+
+    .empty-state p {
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .view-panel { display: none; }
+    .view-panel.active { display: block; }
+
+    /* Status table */
+    .status-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.84rem;
+    }
+
+    .status-table th,
+    .status-table td {
+      padding: 12px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .status-table th {
+      background: var(--surface2);
+      font-weight: 700;
+      color: var(--muted);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-table td {
+      font-weight: 500;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    .dot.green { background: var(--accent); }
+    .dot.yellow { background: var(--warning); }
+    .dot.gray { background: #9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-accent"></div>
+    <div class="header-inner">
+      <h1>Laporan Tutup Cabang</h1>
+      <div class="sub">KC Syahrul · SE/SUP/012/I/26 Rev 6</div>
+      <div class="date-display" id="dateDisplay"></div>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="input" onclick="switchTab('input')">Input Laporan</button>
+      <button class="tab" data-tab="status" onclick="switchTab('status')">Status KC</button>
+    </div>
+
+    <!-- ========== TAB INPUT ========== -->
+    <div id="panel-input" class="view-panel active">
+      <div class="card">
+        <div class="card-title">Cabang & Jabatan</div>
+        <div class="row">
+          <div>
+            <label for="cabang">Cabang</label>
+            <select id="cabang" onchange="onSelectionChange()">
+              <option value="">-- Pilih Cabang --</option>
+              <option value="GRT010">GRT010</option>
+              <option value="GRT013">GRT013</option>
+              <option value="GRT019">GRT019</option>
+              <option value="GRT020">GRT020</option>
+            </select>
+          </div>
+          <div>
+            <label for="jabatan">Jabatan / Divisi</label>
+            <select id="jabatan" onchange="onSelectionChange()">
+              <option value="">-- Pilih Jabatan --</option>
+              <option value="kepala_unit">Kepala Unit</option>
+              <option value="kasir">Kasir</option>
+              <option value="gudang">Gudang</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="statusCard" class="card" style="display:none;">
+        <div class="status-bar">
+          <div>
+            <span id="statusBadge" class="badge empty">Belum ada data</span>
+          </div>
+          <div class="progress-text" id="progressText">0 / 0 foto</div>
+        </div>
+        <div class="checklist-summary" id="checklistSummary"></div>
+      </div>
+
+      <div id="itemsCard" class="card" style="display:none;">
+        <div class="card-title">Daftar Laporan</div>
+        <div class="item-list" id="itemList"></div>
+      </div>
+
+      <div id="emptyState" class="empty-state">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        <p>Pilih cabang dan jabatan<br>untuk mulai input foto laporan</p>
+      </div>
+    </div>
+
+    <!-- ========== TAB STATUS KC ========== -->
+    <div id="panel-status" class="view-panel">
+      <div class="card">
+        <div class="card-title">Status Laporan Hari Ini</div>
+        <label for="statusCabang">Filter Cabang</label>
+        <select id="statusCabang" onchange="renderStatusTable()" style="margin-bottom:14px;">
+          <option value="">Semua Cabang</option>
+          <option value="GRT010">GRT010</option>
+          <option value="GRT013">GRT013</option>
+          <option value="GRT019">GRT019</option>
+          <option value="GRT020">GRT020</option>
+        </select>
+        <div id="statusTableWrap">
+          <table class="status-table">
+            <thead>
+              <tr>
+                <th>Cabang</th>
+                <th>Divisi</th>
+                <th>Status</th>
+                <th>Progress</th>
+              </tr>
+            </thead>
+            <tbody id="statusTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <button class="btn btn-secondary" style="width:100%;" onclick="clearTodayData()">
+          Hapus Data Hari Ini (Reset)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer Actions (only on input tab when ready) -->
+  <div class="footer-actions" id="footerActions" style="display:none;">
+    <button class="btn btn-secondary" onclick="saveDraft()">Simpan</button>
+    <button class="btn btn-wa" id="btnKirimWA" onclick="prepareSendWA()" disabled>
+      Kirim ke WA
+    </button>
+  </div>
+
+  <!-- Modal Kirim WA -->
+  <div class="modal-overlay" id="modalWA">
+    <div class="modal">
+      <h3>Kirim ke WhatsApp</h3>
+      <p>Foto & video akan ikut dikirim (jika browser mendukung). Pilih <strong>WhatsApp</strong> di menu share, lalu pilih chat/grup tujuan.</p>
+      <div class="wa-preview" id="waPreviewText"></div>
+      <div class="btn-group">
+        <button class="btn btn-wa" onclick="openWhatsApp()">Kirim ke WhatsApp</button>
+        <button class="btn btn-secondary" onclick="closeModal()">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========== DATA DEFINISI SESUAI PDF ==========
+    const CHECKLIST = {
+      kepala_unit: [
+        { id: 'ku_1', title: 'Foto token listrik', note: 'Pastikan di atas 50,00 Kwh', multi: false },
+        { id: 'ku_2', title: 'Tralis pelayanan', note: 'Harus sudah tertutup', multi: false },
+        { id: 'ku_3', title: 'Panel alarm', note: 'Jika ada, sudah dinyalakan (Secom/Alsok: Panel Keypad aktif)', multi: false },
+        { id: 'ku_4', title: 'Kipas angin pelayanan', note: 'Kondisi mati', multi: false },
+        { id: 'ku_5', title: 'Lampu pelayanan', note: 'Kondisi mati', multi: false },
+        { id: 'ku_6', title: 'Rollingdoor', note: 'Terkunci dan tertutup sempurna', multi: false },
+        { id: 'ku_7', title: 'Inventaris sudah di dalam gudang', note: 'Laptop dan HP', multi: false },
+        { id: 'ku_8', title: 'Wifi / Internet aktif', note: 'Jika ada, modem wifi aktif', multi: false },
+        {
+          id: 'ku_9',
+          title: 'Foto proses magnetin emas & penyimpanan Map Emas sebelum terkunci',
+          note: '3 foto wajib',
+          multi: true,
+          subs: [
+            { id: 'ku_9a', title: 'Selfie Kepala Unit + Kadiv Gudang' },
+            { id: 'ku_9b', title: 'Proses magnet' },
+            { id: 'ku_9c', title: 'Penyimpanan Map Emas sebelum dikunci (terlihat masuk Brankas)' }
+          ]
+        },
+        { id: 'ku_10', title: 'Video kegiatan body check di bawah CCTV area pelayanan', note: 'Wajib VIDEO. Body check + check tas seluruh karyawan (oleh KU / petugas).', multi: false, type: 'video' },
+        { id: 'ku_11', title: 'Foto jok motor & bagasi kendaraan karyawan', note: 'Pastikan jok motor dibuka dan bagasi dicek (kosong / tidak ada barang mencurigakan)', multi: false },
+
+        { id: 'ku_12', title: 'Foto form pemegang kunci', note: '', multi: false },
+        { id: 'ku_13', title: 'Foto pengisian Logbook Pembelajaran emas', note: '', multi: false },
+        { id: 'ku_14', title: 'Foto pengisian Logbook Body Check', note: '', multi: false }
+      ],
+
+      kasir: [
+        { id: 'ks_1', title: 'Logbook Kasir', note: 'Sudah terisi dan ada ttd saksi', multi: false },
+        { id: 'ks_2', title: 'Check Fisik Uang', note: 'Sudah terisi dan ada ttd saksi', multi: false },
+        { id: 'ks_3', title: 'Laporan transaksi harian', note: 'Uang balance sama dengan check fisik uang + ttd saksi', multi: false },
+        { id: 'ks_4', title: 'Laporan serah terima barang', note: 'Sudah ada ttd kasir, kepala unit, dan gudang', multi: false },
+        { id: 'ks_5', title: 'Brankas Uang', note: 'Tertutup dan terkunci sempurna', multi: false },
+        { id: 'ks_6', title: 'Laci Kasir', note: 'Sudah tidak ada uang di laci', multi: false },
+        { id: 'ks_7', title: 'Foto kondisi nomor WhatsApp cabang', note: 'Menu chat belum dibaca harus kosong (seluruh chat sudah terbalas)', multi: false },
+        { id: 'ks_8', title: 'PC Kasir', note: 'PC mati + kabel power sudah dicabut dari stopkontak', multi: false }
+      ],
+      gudang: [
+        { id: 'gd_1', title: 'Kipas angin gudang', note: 'Kondisi mati', multi: false },
+        { id: 'gd_2', title: 'Lampu gudang', note: 'Kondisi mati', multi: false },
+        { id: 'gd_3', title: 'DVR CCTV', note: 'Jika ada, kondisi menyala', multi: false },
+        { id: 'gd_4', title: 'CCTV Edge / IP Cam', note: 'Kondisi menyala', multi: false },
+        { id: 'gd_5', title: 'Foto barang gudang tidak ada di lantai', note: 'Pastikan tidak ada di lantai (kecuali gudang di lantai 2)', multi: false },
+        { id: 'gd_6', title: 'Tralis gudang', note: 'Jika ada, sudah tertutup dan terkunci', multi: false },
+        { id: 'gd_7', title: 'Pintu gudang', note: 'Sudah tertutup sempurna, tergembok dan terkunci', multi: false },
+        { id: 'gd_8', title: 'Foto penyimpanan Map Emas setelah terkunci', note: 'Selfie Kepala Unit + Kadiv Gudang setelah dikunci', multi: false }
+      ]
+    };
+
+    const JABATAN_LABEL = {
+      kepala_unit: 'Kepala Unit',
+      kasir: 'Kasir',
+      gudang: 'Gudang'
+    };
+
+    // ========== STATE ==========
+    let currentPhotos = {}; // { itemId: [{data, type, name}, ...] } untuk preview
+    let currentFiles = {};  // { itemId: [File, ...] } untuk share ke WA
+    let currentDateKey = '';
+
+    function getTodayKey() {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatDateID() {
+      const d = new Date();
+      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      return d.toLocaleDateString('id-ID', options);
+    }
+
+    // ========== STORAGE ==========
+    function storageKey(cabang, jabatan) {
+      return `ltc_${currentDateKey}_${cabang}_${jabatan}`;
+    }
+
+    function sentKey(cabang, jabatan) {
+      return `ltc_sent_${currentDateKey}_${cabang}_${jabatan}`;
+    }
+
+    function isSent(cabang, jabatan) {
+      return localStorage.getItem(sentKey(cabang, jabatan)) === '1';
+    }
+
+    function markSent(cabang, jabatan) {
+      localStorage.setItem(sentKey(cabang, jabatan), '1');
+    }
+
+    function updateSendButton() {
+      const cabang = document.getElementById('cabang').value;
+      const jabatan = document.getElementById('jabatan').value;
+      const btn = document.getElementById('btnKirimWA');
+      if (!cabang || !jabatan) {
+        btn.disabled = true;
+        btn.textContent = 'Kirim ke WA';
+        btn.className = 'btn btn-wa';
+        return;
+      }
+
+      const total = countRequired(jabatan);
+      const filled = countFilled(jabatan);
+      const sent = isSent(cabang, jabatan);
+
+      if (sent) {
+        btn.disabled = true;
+        btn.textContent = '✓ Terkirim';
+        btn.className = 'btn btn-sent';
+      } else if (filled === total && total > 0) {
+        btn.disabled = false;
+        btn.textContent = 'Kirim ke WA';
+        btn.className = 'btn btn-wa';
+      } else {
+        btn.disabled = true;
+        btn.textContent = 'Kirim ke WA';
+        btn.className = 'btn btn-wa';
+      }
+    }
+
+    function saveToStorage() {
+      const cabang = document.getElementById('cabang').value;
+      const jabatan = document.getElementById('jabatan').value;
+      if (!cabang || !jabatan) return;
+
+      const data = {
+        cabang,
+        jabatan,
+        photos: currentPhotos,
+        updatedAt: new Date().toISOString()
+      };
+      try {
+        localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify(data));
+      } catch (e) {
+        console.warn('localStorage penuh, foto tidak disimpan permanen', e);
+      }
+    }
+
+    function loadFromStorage(cabang, jabatan) {
+      const raw = localStorage.getItem(storageKey(cabang, jabatan));
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+
+    // ========== UI ==========
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
+      document.getElementById(`panel-${tab}`).classList.add('active');
+
+      const footer = document.getElementById('footerActions');
+      if (tab === 'input') {
+        const cabang = document.getElementById('cabang').value;
+        const jabatan = document.getElementById('jabatan').value;
+        footer.style.display = (cabang && jabatan) ? 'flex' : 'none';
+      } else {
+        footer.style.display = 'none';
+        renderStatusTable();
+      }
+    }
+
+    function onSelectionChange() {
+      const cabang = document.getElementById('cabang').value;
+      const jabatan = document.getElementById('jabatan').value;
+
+      if (!cabang || !jabatan) {
+        document.getElementById('statusCard').style.display = 'none';
+        document.getElementById('itemsCard').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'block';
+        document.getElementById('footerActions').style.display = 'none';
+        currentPhotos = {};
+        currentFiles = {};
+        return;
+      }
+
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('statusCard').style.display = 'block';
+      document.getElementById('itemsCard').style.display = 'block';
+      document.getElementById('footerActions').style.display = 'flex';
+
+      // Load existing (preview saja; File asli untuk share hanya ada di sesi ini)
+      const saved = loadFromStorage(cabang, jabatan);
+      currentPhotos = saved ? (saved.photos || {}) : {};
+      currentFiles = {}; // File tidak bisa disimpan di localStorage
+
+      renderItems(jabatan);
+      updateProgress(jabatan);
+    }
+
+    function renderItems(jabatan) {
+      const list = CHECKLIST[jabatan];
+      const container = document.getElementById('itemList');
+      container.innerHTML = '';
+
+      list.forEach((item, idx) => {
+        const num = idx + 1;
+        const hasPhoto = item.multi
+          ? (item.subs.every(s => currentPhotos[s.id] && currentPhotos[s.id].length > 0))
+          : (currentPhotos[item.id] && currentPhotos[item.id].length > 0);
+
+        const div = document.createElement('div');
+        div.className = 'item' + (hasPhoto ? ' filled' : '');
+        div.id = `item-${item.id}`;
+
+        let content = `
+          <div class="item-header">
+            <div class="item-num">${num}</div>
+            <div>
+              <div class="item-title">${item.title}</div>
+              ${item.note ? `<div class="item-note">${item.note}</div>` : ''}
+            </div>
+          </div>
+        `;
+
+        if (item.multi) {
+          content += `<div class="sub-items">`;
+          item.subs.forEach(sub => {
+            content += `
+              <div class="sub-item">
+                <label>${sub.title}</label>
+                <div class="file-input-wrap">
+                  <input type="file" accept="image/*"
+                         onchange="handleFile(event, '${sub.id}')" multiple />
+                  <div class="file-btn">📷 Ambil / Pilih Foto</div>
+                </div>
+                <div class="preview-grid" id="preview-${sub.id}"></div>
+              </div>
+            `;
+          });
+          content += `</div>`;
+        } else {
+          const acceptType = item.type === 'video' ? 'video/*' : (item.type === 'both' ? 'image/*,video/*' : 'image/*');
+          const btnLabel = item.type === 'video' ? '🎥 Ambil / Pilih Video' : (item.type === 'both' ? '📷🎥 Ambil Foto / Video' : '📷 Ambil / Pilih Foto');
+          content += `
+            <div class="file-input-wrap">
+              <input type="file" accept="${acceptType}"
+                     onchange="handleFile(event, '${item.id}', '${item.type || 'image'}')" multiple />
+              <div class="file-btn">${btnLabel}</div>
+            </div>
+            <div class="preview-grid" id="preview-${item.id}"></div>
+          `;
+        }
+
+        div.innerHTML = content;
+        container.appendChild(div);
+
+        // Render existing previews
+        if (item.multi) {
+          item.subs.forEach(sub => renderPreviews(sub.id));
+        } else {
+          renderPreviews(item.id);
+        }
+      });
+    }
+
+    function handleFile(event, itemId, mediaType) {
+      const files = Array.from(event.target.files);
+      if (!files.length) return;
+
+      if (!currentPhotos[itemId]) currentPhotos[itemId] = [];
+      if (!currentFiles[itemId]) currentFiles[itemId] = [];
+
+      files.forEach(file => {
+        const isImage = file.type.startsWith('image/');
+        const isVideo = file.type.startsWith('video/');
+        if (!isImage && !isVideo) return;
+
+        // Untuk type video: hanya izinkan video
+        if (mediaType === 'video' && !isVideo) {
+          alert('Item ini wajib video. Silakan pilih file video.');
+          return;
+        }
+
+        // Batasi ukuran video ~50MB
+        if (isVideo && file.size > 50 * 1024 * 1024) {
+          alert('Ukuran video terlalu besar (maks. 50MB). Silakan rekam lebih singkat.');
+          return;
+        }
+
+        // Simpan File asli untuk share ke WA
+        currentFiles[itemId].push(file);
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const dataUrl = e.target.result;
+          currentPhotos[itemId].push({
+            data: dataUrl,
+            type: isVideo ? 'video' : 'image',
+            name: file.name
+          });
+          renderPreviews(itemId);
+          markItemFilled(itemId);
+          updateProgress(document.getElementById('jabatan').value);
+          saveToStorage();
+        };
+        reader.readAsDataURL(file);
+      });
+
+      // Reset input so same file can be re-selected
+      event.target.value = '';
+    }
+
+    function renderPreviews(itemId) {
+      const grid = document.getElementById(`preview-${itemId}`);
+      if (!grid) return;
+      grid.innerHTML = '';
+      const photos = currentPhotos[itemId] || [];
+      photos.forEach((item, i) => {
+        // Support format lama (string) dan baru (object)
+        const src = typeof item === 'string' ? item : item.data;
+        const type = typeof item === 'string' ? 'image' : (item.type || 'image');
+
+        const div = document.createElement('div');
+        div.className = 'preview-item';
+        if (type === 'video') {
+          div.innerHTML = `
+            <video src="${src}" controls muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+            <button class="remove-btn" onclick="removePhoto('${itemId}', ${i})" title="Hapus">×</button>
+          `;
+        } else {
+          div.innerHTML = `
+            <img src="${src}" alt="preview" />
+            <button class="remove-btn" onclick="removePhoto('${itemId}', ${i})" title="Hapus">×</button>
+          `;
+        }
+        grid.appendChild(div);
+      });
+    }
+
+    function removePhoto(itemId, index) {
+      if (!currentPhotos[itemId]) return;
+      currentPhotos[itemId].splice(index, 1);
+      if (currentPhotos[itemId].length === 0) delete currentPhotos[itemId];
+      if (currentFiles[itemId]) {
+        currentFiles[itemId].splice(index, 1);
+        if (currentFiles[itemId].length === 0) delete currentFiles[itemId];
+      }
+      renderPreviews(itemId);
+      markItemFilled(itemId);
+      updateProgress(document.getElementById('jabatan').value);
+      saveToStorage();
+    }
+
+    function markItemFilled(itemId) {
+      // Find parent item
+      const jabatan = document.getElementById('jabatan').value;
+      const list = CHECKLIST[jabatan];
+      let parentId = itemId;
+      for (const item of list) {
+        if (item.id === itemId) {
+          parentId = item.id;
+          break;
+        }
+        if (item.multi && item.subs.some(s => s.id === itemId)) {
+          parentId = item.id;
+          break;
+        }
+      }
+
+      const el = document.getElementById(`item-${parentId}`);
+      if (!el) return;
+
+      const itemDef = list.find(i => i.id === parentId);
+      let filled = false;
+      if (itemDef.multi) {
+        filled = itemDef.subs.every(s => currentPhotos[s.id] && currentPhotos[s.id].length > 0);
+      } else {
+        filled = currentPhotos[parentId] && currentPhotos[parentId].length > 0;
+      }
+      el.classList.toggle('filled', filled);
+    }
+
+    function countRequired(jabatan) {
+      const list = CHECKLIST[jabatan];
+      let total = 0;
+      list.forEach(item => {
+        if (item.multi) total += item.subs.length;
+        else total += 1;
+      });
+      return total;
+    }
+
+    function countFilled(jabatan) {
+      const list = CHECKLIST[jabatan];
+      let filled = 0;
+      list.forEach(item => {
+        if (item.multi) {
+          item.subs.forEach(s => {
+            if (currentPhotos[s.id] && currentPhotos[s.id].length > 0) filled++;
+          });
+        } else {
+          if (currentPhotos[item.id] && currentPhotos[item.id].length > 0) filled++;
+        }
+      });
+      return filled;
+    }
+
+    function updateProgress(jabatan) {
+      if (!jabatan) return;
+      const cabang = document.getElementById('cabang').value;
+      const total = countRequired(jabatan);
+      const filled = countFilled(jabatan);
+      const pct = total ? Math.round((filled / total) * 100) : 0;
+      const sent = cabang ? isSent(cabang, jabatan) : false;
+
+      document.getElementById('progressText').textContent = `${filled} / ${total} item`;
+
+      const badge = document.getElementById('statusBadge');
+      if (sent) {
+        badge.className = 'badge complete';
+        badge.textContent = '✓ Terkirim';
+      } else if (filled === 0) {
+        badge.className = 'badge empty';
+        badge.textContent = 'Belum ada data';
+      } else if (filled === total) {
+        badge.className = 'badge complete';
+        badge.textContent = '✓ Lengkap';
+      } else {
+        badge.className = 'badge incomplete';
+        badge.textContent = `Belum lengkap (${pct}%)`;
+      }
+
+      if (sent) {
+        document.getElementById('checklistSummary').textContent =
+          'Laporan sudah dikirim ke WhatsApp.';
+      } else if (filled === total) {
+        document.getElementById('checklistSummary').textContent =
+          'Semua item sudah terisi. Siap dikirim ke WhatsApp.';
+      } else {
+        document.getElementById('checklistSummary').textContent =
+          `Masih kurang ${total - filled} item.`;
+      }
+
+      updateSendButton();
+    }
+
+    function saveDraft() {
+      saveToStorage();
+      alert('Data berhasil disimpan sementara di perangkat ini.');
+    }
+
+    // ========== WA ==========
+    function collectOrderedFiles(jabatan) {
+      // Kumpulkan file sesuai urutan checklist, rename biar urut di WA
+      const list = CHECKLIST[jabatan] || [];
+      const ordered = [];
+      let counter = 1;
+
+      const pushFiles = (itemId, label) => {
+        const arr = currentFiles[itemId] || [];
+        arr.forEach((file, i) => {
+          const ext = (file.name && file.name.includes('.'))
+            ? file.name.split('.').pop()
+            : (file.type.startsWith('video/') ? 'mp4' : 'jpg');
+          const safeLabel = label
+            .replace(/[^a-zA-Z0-9\u00C0-\u024F\s]/g, '')
+            .trim()
+            .replace(/\s+/g, '_')
+            .substring(0, 40);
+          const num = String(counter).padStart(2, '0');
+          const newName = `${num}_${safeLabel}${arr.length > 1 ? '_' + (i + 1) : ''}.${ext}`;
+          ordered.push(new File([file], newName, { type: file.type, lastModified: file.lastModified }));
+          counter++;
+        });
+      };
+
+      list.forEach((item, idx) => {
+        if (item.multi) {
+          item.subs.forEach((sub, sidx) => {
+            pushFiles(sub.id, `${idx + 1}${sidx + 1}_${sub.title}`);
+          });
+        } else {
+          pushFiles(item.id, `${idx + 1}_${item.title}`);
+        }
+      });
+
+      return ordered;
+    }
+
+    function prepareSendWA() {
+      const cabang = document.getElementById('cabang').value;
+      const jabatan = document.getElementById('jabatan').value;
+      if (!cabang || !jabatan) return;
+
+      const label = JABATAN_LABEL[jabatan];
+      const total = countRequired(jabatan);
+      const filled = countFilled(jabatan);
+      const tanggal = formatDateID();
+      const allFiles = collectOrderedFiles(jabatan);
+
+      // Caption singkat saja (tanpa status & daftar item)
+      let msg = `LAPORAN TUTUP CABANG\n`;
+      msg += `${cabang} · ${label}\n`;
+      msg += `${tanggal}`;
+
+      window._waMessage = msg;
+      window._waFiles = allFiles;
+
+      const previewEl = document.getElementById('waPreviewText');
+      const hasShare = typeof navigator.share === 'function';
+      let canFiles = false;
+      try {
+        canFiles = allFiles.length > 0 && hasShare && navigator.canShare && navigator.canShare({ files: allFiles });
+      } catch (_) {
+        canFiles = allFiles.length > 0 && hasShare;
+      }
+
+      if (allFiles.length === 0) {
+        previewEl.textContent = msg +
+          '\n\n⚠️ Foto/video belum siap dikirim.\nAmbil ulang semua foto/video di halaman ini dulu (jangan refresh), baru tekan kirim.\nFile tidak bisa disimpan permanen di browser.';
+      } else if (canFiles || (allFiles.length > 0 && hasShare)) {
+        previewEl.textContent = msg +
+          `\n\n${allFiles.length} file siap dikirim.\n→ Tekan tombol, pilih WhatsApp. Teks + foto/video ikut bersama.`;
+      } else {
+        previewEl.textContent = msg +
+          '\n\n⚠️ Browser ini tidak mendukung kirim file otomatis.\nPakai Chrome di Android agar foto/video ikut terkirim.';
+      }
+
+      document.getElementById('modalWA').classList.add('show');
+    }
+
+    async function openWhatsApp() {
+      const msg = window._waMessage || '';
+      const files = window._waFiles || [];
+      const cabang = document.getElementById('cabang').value;
+      const jabatan = document.getElementById('jabatan').value;
+
+      const finishSent = () => {
+        if (cabang && jabatan) {
+          markSent(cabang, jabatan);
+          updateProgress(jabatan);
+        }
+        closeModal();
+      };
+
+      // Wajib ada file — kalau kosong, jangan kirim teks saja biar user tidak bingung
+      if (!files.length) {
+        alert('Foto/video belum siap.\n\nAmbil ulang semua foto & video di halaman ini (jangan ditutup/refresh), lalu kirim lagi.');
+        closeModal();
+        return;
+      }
+
+      if (!navigator.share) {
+        alert('Browser tidak mendukung share.\nPakai Chrome di Android.');
+        closeModal();
+        return;
+      }
+
+      // 1) Coba kirim file + teks
+      try {
+        await navigator.share({ files: files, text: msg });
+        finishSent();
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          closeModal(); // user batal
+          return;
+        }
+        console.warn('Share files gagal:', err);
+      }
+
+      // 2) Coba file saja (tanpa text) — kadang lebih lolos di WA
+      try {
+        await navigator.share({ files: files });
+        finishSent();
+        return;
+      } catch (err2) {
+        if (err2 && err2.name === 'AbortError') {
+          closeModal();
+          return;
+        }
+        console.warn('Share files-only gagal:', err2);
+      }
+
+      // 3) Jangan pakai window.open (sering diblokir). Pakai share teks saja + peringatan
+      try {
+        await navigator.share({ text: msg + '\n\n(Foto/video gagal dilampirkan otomatis — kirim manual dari galeri)' });
+        alert('Teks terkirim, tapi foto/video gagal ikut.\nLampirkan manual dari galeri di chat WhatsApp.');
+        // tidak mark sent supaya user bisa coba lagi
+        closeModal();
+      } catch (err3) {
+        if (err3 && err3.name === 'AbortError') {
+          closeModal();
+          return;
+        }
+        alert('Gagal membuka share.\nPastikan pakai Chrome Android dan izinkan popup/share.');
+        closeModal();
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modalWA').classList.remove('show');
+    }
+
+    // ========== STATUS KC ==========
+    function renderStatusTable() {
+      const filterCabang = document.getElementById('statusCabang').value;
+      const tbody = document.getElementById('statusTableBody');
+      tbody.innerHTML = '';
+
+      const cabangs = ['GRT010', 'GRT013', 'GRT019', 'GRT020'];
+      const jabatans = ['kepala_unit', 'kasir', 'gudang'];
+
+      let hasAny = false;
+
+      cabangs.forEach(cab => {
+        if (filterCabang && filterCabang !== cab) return;
+
+        jabatans.forEach(jab => {
+          const data = loadFromStorage(cab, jab);
+          const total = countRequired(jab);
+          let filled = 0;
+          if (data && data.photos) {
+            const list = CHECKLIST[jab];
+            list.forEach(item => {
+              if (item.multi) {
+                item.subs.forEach(s => {
+                  if (data.photos[s.id] && data.photos[s.id].length > 0) filled++;
+                });
+              } else {
+                if (data.photos[item.id] && data.photos[item.id].length > 0) filled++;
+              }
+            });
+          }
+
+          hasAny = true;
+          const tr = document.createElement('tr');
+          let statusHtml;
+          const sent = isSent(cab, jab);
+          if (sent) {
+            statusHtml = `<span class="dot green"></span>Terkirim`;
+          } else if (filled === 0) {
+            statusHtml = `<span class="dot gray"></span>Belum`;
+          } else if (filled === total) {
+            statusHtml = `<span class="dot green"></span>Lengkap`;
+          } else {
+            statusHtml = `<span class="dot yellow"></span>Sebagian`;
+          }
+
+          tr.innerHTML = `
+            <td><strong>${cab}</strong></td>
+            <td>${JABATAN_LABEL[jab]}</td>
+            <td>${statusHtml}</td>
+            <td>${filled}/${total}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+
+      if (!hasAny) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#718096;">Belum ada data hari ini</td></tr>`;
+      }
+    }
+
+    function clearTodayData() {
+      if (!confirm('Hapus SEMUA data laporan tutup cabang hari ini dari perangkat ini?')) return;
+      const cabangs = ['GRT010', 'GRT013', 'GRT019', 'GRT020'];
+      const jabatans = ['kepala_unit', 'kasir', 'gudang'];
+      cabangs.forEach(c => {
+        jabatans.forEach(j => {
+          localStorage.removeItem(storageKey(c, j));
+          localStorage.removeItem(sentKey(c, j));
+        });
+      });
+      currentPhotos = {};
+      currentFiles = {};
+      onSelectionChange();
+      renderStatusTable();
+      alert('Data hari ini sudah dihapus.');
+    }
+
+    // ========== INIT ==========
+    currentDateKey = getTodayKey();
+    document.getElementById('dateDisplay').textContent = formatDateID();
+  </script>
+</body>
+</html>
