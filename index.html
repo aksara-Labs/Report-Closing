@@ -1171,36 +1171,24 @@
 
     // ========== WA ==========
     function collectOrderedFiles(jabatan) {
-      // Kumpulkan file sesuai urutan checklist, rename biar urut di WA
+      // Pakai File ASLI (jangan di-wrap ulang — sering bikin share gagal di Android)
       const list = CHECKLIST[jabatan] || [];
       const ordered = [];
-      let counter = 1;
 
-      const pushFiles = (itemId, label) => {
+      const pushFiles = (itemId) => {
         const arr = currentFiles[itemId] || [];
-        arr.forEach((file, i) => {
-          const ext = (file.name && file.name.includes('.'))
-            ? file.name.split('.').pop()
-            : (file.type.startsWith('video/') ? 'mp4' : 'jpg');
-          const safeLabel = label
-            .replace(/[^a-zA-Z0-9\u00C0-\u024F\s]/g, '')
-            .trim()
-            .replace(/\s+/g, '_')
-            .substring(0, 40);
-          const num = String(counter).padStart(2, '0');
-          const newName = `${num}_${safeLabel}${arr.length > 1 ? '_' + (i + 1) : ''}.${ext}`;
-          ordered.push(new File([file], newName, { type: file.type, lastModified: file.lastModified }));
-          counter++;
+        arr.forEach((file) => {
+          if (file && (file instanceof File || file instanceof Blob)) {
+            ordered.push(file);
+          }
         });
       };
 
-      list.forEach((item, idx) => {
+      list.forEach((item) => {
         if (item.multi) {
-          item.subs.forEach((sub, sidx) => {
-            pushFiles(sub.id, `${idx + 1}${sidx + 1}_${sub.title}`);
-          });
+          item.subs.forEach((sub) => pushFiles(sub.id));
         } else {
-          pushFiles(item.id, `${idx + 1}_${item.title}`);
+          pushFiles(item.id);
         }
       });
 
@@ -1213,12 +1201,9 @@
       if (!cabang || !jabatan) return;
 
       const label = JABATAN_LABEL[jabatan];
-      const total = countRequired(jabatan);
-      const filled = countFilled(jabatan);
       const tanggal = formatDateID();
       const allFiles = collectOrderedFiles(jabatan);
 
-      // Caption singkat saja (tanpa status & daftar item)
       let msg = `LAPORAN TUTUP CABANG\n`;
       msg += `${cabang} · ${label}\n`;
       msg += `${tanggal}`;
@@ -1228,22 +1213,16 @@
 
       const previewEl = document.getElementById('waPreviewText');
       const hasShare = typeof navigator.share === 'function';
-      let canFiles = false;
-      try {
-        canFiles = allFiles.length > 0 && hasShare && navigator.canShare && navigator.canShare({ files: allFiles });
-      } catch (_) {
-        canFiles = allFiles.length > 0 && hasShare;
-      }
 
       if (allFiles.length === 0) {
         previewEl.textContent = msg +
-          '\n\n⚠️ Foto/video belum siap dikirim.\nAmbil ulang semua foto/video di halaman ini dulu (jangan refresh), baru tekan kirim.\nFile tidak bisa disimpan permanen di browser.';
-      } else if (canFiles || (allFiles.length > 0 && hasShare)) {
+          '\n\n⚠️ Foto/video belum siap dikirim.\nAmbil ulang SEMUA foto/video di halaman ini (jangan refresh), baru kirim.';
+      } else if (!hasShare) {
         previewEl.textContent = msg +
-          `\n\n${allFiles.length} file siap dikirim.\n→ Tekan tombol, pilih WhatsApp. Teks + foto/video ikut bersama.`;
+          '\n\n⚠️ Browser tidak support share.\nPakai Google Chrome (bukan browser bawaan / dalam aplikasi).';
       } else {
         previewEl.textContent = msg +
-          '\n\n⚠️ Browser ini tidak mendukung kirim file otomatis.\nPakai Chrome di Android agar foto/video ikut terkirim.';
+          `\n\n${allFiles.length} file siap.\nTekan tombol hijau → pilih WhatsApp.`;
       }
 
       document.getElementById('modalWA').classList.add('show');
@@ -1263,58 +1242,58 @@
         closeModal();
       };
 
-      // Wajib ada file — kalau kosong, jangan kirim teks saja biar user tidak bingung
       if (!files.length) {
-        alert('Foto/video belum siap.\n\nAmbil ulang semua foto & video di halaman ini (jangan ditutup/refresh), lalu kirim lagi.');
+        alert('Foto/video belum siap.\n\nAmbil ulang semua foto & video (jangan refresh), lalu kirim lagi.');
         closeModal();
         return;
       }
 
       if (!navigator.share) {
-        alert('Browser tidak mendukung share.\nPakai Chrome di Android.');
+        alert('Browser tidak mendukung share.\n\nInstall & buka lewat Google Chrome.');
         closeModal();
         return;
       }
 
-      // 1) Coba kirim file + teks
+      // Coba share file + teks
       try {
-        await navigator.share({ files: files, text: msg });
+        const data = { files: files, text: msg };
+        // Beberapa browser wajib cek canShare
+        if (navigator.canShare && !navigator.canShare(data)) {
+          // Coba tanpa text
+          if (navigator.canShare({ files: files })) {
+            await navigator.share({ files: files });
+            finishSent();
+            return;
+          }
+          throw new Error('canShare=false (file tidak didukung browser ini)');
+        }
+        await navigator.share(data);
         finishSent();
         return;
       } catch (err) {
         if (err && err.name === 'AbortError') {
-          closeModal(); // user batal
-          return;
-        }
-        console.warn('Share files gagal:', err);
-      }
-
-      // 2) Coba file saja (tanpa text) — kadang lebih lolos di WA
-      try {
-        await navigator.share({ files: files });
-        finishSent();
-        return;
-      } catch (err2) {
-        if (err2 && err2.name === 'AbortError') {
           closeModal();
           return;
         }
-        console.warn('Share files-only gagal:', err2);
-      }
+        console.warn('Share gagal:', err);
 
-      // 3) Jangan pakai window.open (sering diblokir). Pakai share teks saja + peringatan
-      try {
-        await navigator.share({ text: msg + '\n\n(Foto/video gagal dilampirkan otomatis — kirim manual dari galeri)' });
-        alert('Teks terkirim, tapi foto/video gagal ikut.\nLampirkan manual dari galeri di chat WhatsApp.');
-        // tidak mark sent supaya user bisa coba lagi
-        closeModal();
-      } catch (err3) {
-        if (err3 && err3.name === 'AbortError') {
-          closeModal();
+        // Fallback: file saja
+        try {
+          await navigator.share({ files: files });
+          finishSent();
           return;
+        } catch (err2) {
+          if (err2 && err2.name === 'AbortError') {
+            closeModal();
+            return;
+          }
+          const detail = (err && (err.message || err.name)) ? `\n\nDetail: ${err.name || ''} ${err.message || ''}` : '';
+          alert(
+            'Gagal mengirim foto/video ke WhatsApp.' + detail +
+            '\n\nCoba:\n1. Pakai Google Chrome\n2. Video dipendekkan (< 20 detik)\n3. Kirim ulang tanpa refresh halaman'
+          );
+          closeModal();
         }
-        alert('Gagal membuka share.\nPastikan pakai Chrome Android dan izinkan popup/share.');
-        closeModal();
       }
     }
 
