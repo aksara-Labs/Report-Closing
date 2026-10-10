@@ -1275,30 +1275,66 @@
         return;
       }
 
-      // Kirim SEKALI saja (semua file + teks). Share 2x = Permission denied.
-      try {
-        await navigator.share({ files: files, text: msg });
-        finishSent();
-      } catch (err) {
-        if (err && err.name === 'AbortError') {
-          closeModal();
-          return;
+      // Pisah foto & video — campuran sering gagal di WA Android
+      const images = files.filter(f => f.type.startsWith('image/'));
+      const videos = files.filter(f => f.type.startsWith('video/'));
+
+      const tryShare = async (fileList, withText) => {
+        const data = withText ? { files: fileList, text: msg } : { files: fileList };
+        if (navigator.canShare && !navigator.canShare(data)) {
+          throw new Error('canShare=false');
         }
+        await navigator.share(data);
+      };
+
+      // 1) Coba semua bareng (foto + video + teks)
+      if (files.length) {
         try {
-          await navigator.share({ files: files });
+          await tryShare(files, true);
           finishSent();
-        } catch (err2) {
-          if (err2 && err2.name === 'AbortError') {
-            closeModal();
-            return;
-          }
-          const detail = (err && (err.name || err.message))
-            ? `\n\nDetail: ${err.name || ''} ${err.message || ''}`
-            : '';
-          alert('Gagal kirim ke WhatsApp.' + detail + '\n\nPastikan buka di Google Chrome (bukan dalam chat WA).');
-          closeModal();
+          return;
+        } catch (err) {
+          if (err && err.name === 'AbortError') { closeModal(); return; }
         }
       }
+
+      // 2) Coba foto saja + teks (paling stabil)
+      if (images.length) {
+        try {
+          await tryShare(images, true);
+          if (videos.length) {
+            alert(
+              'Foto sudah terkirim ke WhatsApp.\n\n' +
+              'Video (' + videos.length + ' file) gagal ikut otomatis.\n' +
+              'Kirim video manual: buka chat yang sama → klip → pilih video body check dari galeri.'
+            );
+          }
+          finishSent();
+          return;
+        } catch (err) {
+          if (err && err.name === 'AbortError') { closeModal(); return; }
+        }
+      }
+
+      // 3) Coba video saja (kalau user cuma kirim video)
+      if (videos.length) {
+        try {
+          await tryShare(videos, true);
+          finishSent();
+          return;
+        } catch (err) {
+          if (err && err.name === 'AbortError') { closeModal(); return; }
+        }
+      }
+
+      alert(
+        'Gagal kirim ke WhatsApp.\n\n' +
+        'Tips:\n' +
+        '• Buka di Google Chrome (bukan dari chat WA)\n' +
+        '• Video max 20MB / 3 menit, kualitas sedang\n' +
+        '• Kalau tetap gagal: kirim foto dulu, video manual dari galeri'
+      );
+      closeModal();
     }
 
     function closeModal() {
