@@ -827,7 +827,7 @@
   <!-- Footer Actions (only on input tab when ready) -->
   <div class="footer-actions" id="footerActions" style="display:none;">
     <button class="btn btn-secondary" onclick="saveDraft()">Simpan</button>
-    <button class="btn btn-wa" id="btnKirimWA" onclick="prepareSendWA()" disabled>
+    <button class="btn btn-wa" id="btnKirimWA" onclick="sendToWA()" disabled>
       Kirim ke WA
     </button>
   </div>
@@ -1686,10 +1686,10 @@
 
     // Bangun file untuk share: dari memory ATAU dari draft (dataURL)
     function collectOrderedFiles(jabatan) {
-      // Mulai dari 02 — nomor 01 dikhususkan untuk cover teks
+      // Urut checklist, mulai 01 = foto checklist pertama (bukan cover palsu)
       const list = getChecklist(jabatan) || [];
       const ordered = [];
-      let n = 2;
+      let n = 1;
 
       const pushItem = (itemId, label) => {
         const memFiles = currentFiles[itemId] || [];
@@ -1735,173 +1735,186 @@
       return ordered;
     }
 
-    // Gambar #1: cover berisi teks laporan (semua divisi)
-    function createCoverImage(cabang, label, tanggal) {
+    // Tempel teks laporan di FOTO ASLI pertama (bukan gambar ungu)
+    function burnHeaderOnFirstPhoto(file, lines) {
       return new Promise((resolve) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1080;
-        canvas.height = 1080;
-        const ctx = canvas.getContext('2d');
+        const fail = () => resolve(file);
+        const paint = (src, sw, sh) => {
+          try {
+            const maxW = 1280;
+            let w = sw, h = sh;
+            if (w > maxW) { h = Math.round(h * (maxW / w)); w = maxW; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(src, 0, 0, w, h);
 
-        const g = ctx.createLinearGradient(0, 0, 1080, 1080);
-        g.addColorStop(0, '#4f46e5');
-        g.addColorStop(0.5, '#6366f1');
-        g.addColorStop(1, '#1e1b4b');
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, 1080, 1080);
+            const fontSize = Math.max(22, Math.round(w / 28));
+            const pad = Math.round(fontSize * 0.45);
+            const lineH = fontSize * 1.35;
+            const boxH = pad * 2 + lineH * lines.length;
+            ctx.fillStyle = 'rgba(0,0,0,0.72)';
+            ctx.fillRect(0, 0, w, boxH);
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+            ctx.textBaseline = 'top';
+            lines.forEach((line, i) => {
+              ctx.fillText(line, pad, pad + i * lineH);
+            });
 
-        // kartu putih semi
-        ctx.fillStyle = 'rgba(255,255,255,0.12)';
-        ctx.fillRect(80, 340, 920, 400);
-
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 48px Arial, sans-serif';
-        ctx.fillText('LAPORAN TUTUP CABANG', 540, 460);
-
-        ctx.font = 'bold 42px Arial, sans-serif';
-        ctx.fillText(`${cabang}  ·  ${label}`, 540, 540);
-
-        ctx.font = '30px Arial, sans-serif';
-        ctx.fillStyle = '#c7d2fe';
-        ctx.fillText(tanggal, 540, 620);
-
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            resolve(null);
-            return;
+            canvas.toBlob((blob) => {
+              if (!blob) return fail();
+              resolve(new File([blob], file.name || '01_foto.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
+            }, 'image/jpeg', 0.85);
+          } catch (e) {
+            fail();
           }
-          resolve(new File([blob], '01_LAPORAN_COVER.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
-        }, 'image/jpeg', 0.92);
+        };
+
+        if (typeof createImageBitmap === 'function') {
+          createImageBitmap(file).then((bmp) => {
+            paint(bmp, bmp.width, bmp.height);
+            try { bmp.close(); } catch (_) {}
+          }).catch(fail);
+        } else {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            paint(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
+            URL.revokeObjectURL(url);
+          };
+          img.onerror = () => { URL.revokeObjectURL(url); fail(); };
+          img.src = url;
+        }
       });
     }
 
-    async function prepareSendWA() {
+    // Normalisasi file jadi JPEG sederhana (nama pendek) — biar WA lebih gampang terima
+    async function normalizeShareFiles(files) {
+      const out = [];
+      let i = 0;
+      for (const f of files) {
+        i++;
+        const isImg = (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(f.name || '');
+        if (!isImg) continue; // skip video di trial kirim
+        try {
+          let blob = f;
+          // pastikan type image/jpeg
+          if (f.type !== 'image/jpeg') {
+            const bmp = typeof createImageBitmap === 'function' ? await createImageBitmap(f).catch(() => null) : null;
+            if (bmp) {
+              const c = document.createElement('canvas');
+              const maxW = 1280;
+              let w = bmp.width, h = bmp.height;
+              if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+              c.width = w; c.height = h;
+              c.getContext('2d').drawImage(bmp, 0, 0, w, h);
+              try { bmp.close(); } catch (_) {}
+              blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
+            }
+          }
+          if (!blob) blob = f;
+          const name = String(i).padStart(2, '0') + '.jpg';
+          out.push(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
+        } catch (e) {
+          // fallback: pakai file apa adanya
+          out.push(new File([f], String(i).padStart(2, '0') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
+        }
+      }
+      return out;
+    }
+
+    async function sendToWA() {
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) return;
 
+      if (!navigator.share) {
+        alert('Share tidak tersedia di browser ini.');
+        return;
+      }
+
       const label = JABATAN_LABEL[jabatan];
       const tanggal = formatDateID();
-      const photoFiles = collectOrderedFiles(jabatan);
+      const msg = `LAPORAN TUTUP CABANG\n${cabang} · ${label}\n${tanggal}`;
 
-      let msg = `LAPORAN TUTUP CABANG\n`;
-      msg += `${cabang} · ${label}\n`;
-      msg += `${tanggal}`;
-
-      // Cover teks = gambar no.1, foto checklist mulai no.2
-      const cover = await createCoverImage(cabang, label, tanggal);
-      const allFiles = cover ? [cover, ...photoFiles] : photoFiles;
-
-      window._waMessage = msg;
-      window._waFiles = allFiles;
-
-      const previewEl = document.getElementById('waPreviewText');
-      const hasShare = typeof navigator.share === 'function';
-
-      if (photoFiles.length === 0) {
-        previewEl.textContent = msg +
-          '\n\n⚠️ Belum ada foto. Ambil minimal 1 foto dulu.';
-      } else if (!hasShare) {
-        previewEl.textContent = msg +
-          '\n\n⚠️ Browser tidak support share. Pakai Google Chrome.';
-      } else {
-        previewEl.textContent = msg +
-          `\n\nGambar #1 = teks laporan\nLalu ${photoFiles.length} foto checklist.\nTotal ${allFiles.length} file.\n→ Pilih WhatsApp.`;
+      const raw = collectOrderedFiles(jabatan);
+      if (!raw.length) {
+        alert('Belum ada foto. Ambil minimal 1 foto dulu.');
+        return;
       }
 
-      document.getElementById('modalWA').classList.add('show');
-    }
+      const btn = document.getElementById('btnKirimWA');
+      const oldText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Menyiapkan...';
 
-    async function openWhatsApp() {
-      const msg = window._waMessage || '';
-      const files = window._waFiles || [];
-      const cabang = document.getElementById('cabang').value;
-      const jabatan = document.getElementById('jabatan').value;
-
-      const finishSent = () => {
-        if (cabang && jabatan) {
-          markSent(cabang, jabatan);
-          updateProgress(jabatan);
-        }
-        closeModal();
-        // Setelah foto terkirim: ingatkan kirim video body check langsung ke WA
-        if (jabatan === 'kepala_unit') {
-          setTimeout(() => {
-            alert(
-              'Foto laporan sudah dikirim.\n\n' +
-              '➡️ SEKARANG kirim VIDEO BODY CHECK langsung ke WhatsApp:\n' +
-              'Chat yang sama → ikon klip / galeri → pilih video body check (CCTV area pelayanan).\n\n' +
-              'Video tidak diisi di form (supaya kirim foto tidak gagal).'
-            );
-          }, 400);
-        }
-      };
+      let files = [];
+      try {
+        files = await normalizeShareFiles(raw);
+      } catch (e) {
+        files = raw.filter(f => (f.type || '').startsWith('image/'));
+      }
 
       if (!files.length) {
-        alert('Foto/video belum siap.\n\nAmbil ulang semua foto & video (jangan refresh), lalu kirim lagi.');
-        closeModal();
+        btn.disabled = false;
+        btn.textContent = oldText;
+        alert('Tidak ada foto yang bisa dikirim.');
         return;
       }
 
-      if (!navigator.share) {
-        alert('Browser tidak mendukung share.\n\nInstall & buka lewat Google Chrome.');
-        closeModal();
-        return;
-      }
+      btn.textContent = 'Pilih WhatsApp...';
 
-      // files sudah urut checklist: [01_..., 02_..., 03_...]
-      // Foto dulu (tetap urut), video dipisah — campuran sering gagal di WA
-      const images = files.filter(f => (f.type || '').startsWith('image/'));
-      const videos = files.filter(f => (f.type || '').startsWith('video/'));
+      const attempts = [
+        { files: files, text: msg },
+        { files: files },
+        { files: files.slice(0, 5), text: msg },
+        { files: files.slice(0, 3) },
+        { files: files.slice(0, 1), text: msg }
+      ];
 
-      const tryShare = async (fileList, withText) => {
-        if (!fileList.length) throw new Error('empty');
-        const data = withText ? { files: fileList, text: msg } : { files: fileList };
-        if (navigator.canShare && !navigator.canShare(data)) {
-          throw new Error('canShare=false');
-        }
-        await navigator.share(data);
-      };
-
-      // Prioritas: foto berurutan + teks (caption menempel di batch, file 01_ paling atas)
-      if (images.length) {
+      let lastErr = null;
+      for (const data of attempts) {
         try {
-          await tryShare(images, true);
-          if (videos.length) {
-            alert(
-              'Foto sudah terkirim (urut checklist, teks di caption).\n\n' +
-              'Video masih perlu dikirim manual ke chat yang sama.'
-            );
+          if (navigator.canShare && !navigator.canShare(data)) continue;
+          await navigator.share(data);
+          // sukses
+          markSent(cabang, jabatan);
+          updateProgress(jabatan);
+          btn.textContent = '✓ Terkirim';
+          btn.className = 'btn btn-sent';
+          if (jabatan === 'kepala_unit') {
+            setTimeout(() => {
+              alert('Foto terkirim.\n\nKirim video body check manual ke chat yang sama.');
+            }, 300);
           }
-          finishSent();
           return;
         } catch (err) {
-          if (err && err.name === 'AbortError') { closeModal(); return; }
+          if (err && err.name === 'AbortError') {
+            // user batal — bukan gagal teknis
+            btn.disabled = false;
+            btn.textContent = oldText;
+            btn.className = 'btn btn-wa';
+            return;
+          }
+          lastErr = err;
         }
       }
 
-      // Fallback: semua file (kalau tidak ada foto / foto gagal)
-      if (files.length) {
-        try {
-          await tryShare(files, true);
-          finishSent();
-          return;
-        } catch (err) {
-          if (err && err.name === 'AbortError') { closeModal(); return; }
-        }
-      }
-
-      alert(
-        'Gagal kirim ke WhatsApp.\n\n' +
-        '• Buka di Google Chrome (bukan dari chat WA)\n' +
-        '• Ambil ulang foto tanpa refresh halaman'
-      );
-      closeModal();
+      btn.disabled = false;
+      btn.textContent = oldText;
+      btn.className = 'btn btn-wa';
+      const detail = lastErr ? `\n\n(${lastErr.name || ''} ${lastErr.message || ''})` : '';
+      alert('Gagal kirim foto ke WhatsApp.' + detail + '\n\nCoba kirim 1–3 foto dulu (mode trial).');
     }
 
+    // tetap ada biar tombol modal lama tidak error kalau terpanggil
+    function prepareSendWA() { sendToWA(); }
+    function openWhatsApp() { sendToWA(); }
     function closeModal() {
-      document.getElementById('modalWA').classList.remove('show');
+      const m = document.getElementById('modalWA');
+      if (m) m.classList.remove('show');
     }
 
     // ========== STATUS KC ==========
