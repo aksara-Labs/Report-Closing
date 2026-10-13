@@ -832,15 +832,15 @@
     </button>
   </div>
 
-  <!-- Modal Kirim WA -->
+  <!-- Modal Kirim WA: klik ke-2 = share (wajib user gesture) -->
   <div class="modal-overlay" id="modalWA">
     <div class="modal">
-      <h3>Kirim ke WhatsApp</h3>
-      <p>Pilih <strong>WhatsApp</strong>, lalu pilih chat/grup tujuan. Teks + semua foto/video dikirim sekali.</p>
+      <h3>Siap dikirim</h3>
+      <p>Tekan tombol hijau di bawah.<br>Lalu pilih <strong>WhatsApp</strong> di menu yang muncul.</p>
       <div class="wa-preview" id="waPreviewText"></div>
       <div class="btn-group">
-        <button class="btn btn-wa" onclick="openWhatsApp()">Kirim ke WhatsApp</button>
-        <button class="btn btn-secondary" onclick="closeModal()">Batal</button>
+        <button type="button" class="btn btn-wa" id="btnDoShare" onclick="doShareNow()">Buka menu share → WhatsApp</button>
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
       </div>
     </div>
   </div>
@@ -1829,8 +1829,8 @@
     }
 
     function sendToWA() {
-      // PENTING: jangan await apa pun SEBELUM navigator.share
-      // (kalau await dulu → NotAllowedError: Must be handling a user gesture)
+      // Langkah 1: siapkan file (boleh sync), tampilkan modal
+      // Langkah 2: user klik "Buka menu share" → doShareNow() = user gesture baru
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) return;
@@ -1845,39 +1845,65 @@
       const msg = `LAPORAN TUTUP CABANG\n${cabang} · ${label}\n${tanggal}`;
 
       const raw = collectOrderedFiles(jabatan);
-      // Hanya foto, nama pendek, SYNC (tanpa canvas/await)
-      const files = raw
-        .filter(f => f && ((f.type || '').startsWith('image/') || f.type === '' || !f.type))
-        .map((f, i) => new File([f], String(i + 1).padStart(2, '0') + '.jpg', {
-          type: (f.type && f.type.startsWith('image/')) ? f.type : 'image/jpeg',
-          lastModified: Date.now()
-        }));
+      const files = [];
+      raw.forEach((f, i) => {
+        if (!f) return;
+        const t = f.type || '';
+        if (t.startsWith('video/')) return;
+        // Pakai blob asli, nama pendek
+        try {
+          files.push(new File([f], String(i + 1).padStart(2, '0') + '.jpg', {
+            type: t.startsWith('image/') ? t : 'image/jpeg',
+            lastModified: Date.now()
+          }));
+        } catch (e) {
+          files.push(f);
+        }
+      });
 
       if (!files.length) {
-        alert('Belum ada foto. Ambil minimal 1 foto dulu.');
+        alert('Belum ada foto di memori.\nAmbil/pilih foto lagi (jangan refresh), lalu kirim.');
         return;
       }
 
-      const btn = document.getElementById('btnKirimWA');
-      const oldText = btn ? btn.textContent : '';
+      window._sharePayload = { files, text: msg, cabang, jabatan };
 
-      const dataWithText = { files, text: msg };
-      const dataFilesOnly = { files };
+      const previewEl = document.getElementById('waPreviewText');
+      if (previewEl) {
+        previewEl.textContent = msg + '\n\n' + files.length + ' foto siap.\nTekan tombol hijau di bawah.';
+      }
+      document.getElementById('modalWA').classList.add('show');
+    }
 
-      let shareData = dataWithText;
-      if (navigator.canShare) {
-        if (navigator.canShare(dataWithText)) shareData = dataWithText;
-        else if (navigator.canShare(dataFilesOnly)) shareData = dataFilesOnly;
-        else {
-          alert('Browser menolak share file ini. Coba kurangi jumlah foto.');
-          return;
-        }
+    function doShareNow() {
+      // HANYA share di sini — harus dari klik tombol (user gesture)
+      const payload = window._sharePayload;
+      if (!payload || !payload.files || !payload.files.length) {
+        alert('Data share kosong. Tutup, ambil foto, coba lagi.');
+        return;
       }
 
-      // Langsung share — masih dalam user gesture (klik tombol)
-      navigator.share(shareData).then(() => {
+      const { files, text, cabang, jabatan } = payload;
+      const withText = { files, text };
+      const filesOnly = { files };
+
+      let data = withText;
+      try {
+        if (navigator.canShare) {
+          if (navigator.canShare(withText)) data = withText;
+          else if (navigator.canShare(filesOnly)) data = filesOnly;
+          else {
+            alert('File tidak bisa di-share. Coba 1 foto saja.');
+            return;
+          }
+        }
+      } catch (_) {}
+
+      navigator.share(data).then(() => {
+        closeModal();
         markSent(cabang, jabatan);
         updateProgress(jabatan);
+        const btn = document.getElementById('btnKirimWA');
         if (btn) {
           btn.textContent = '✓ Terkirim';
           btn.className = 'btn btn-sent';
@@ -1885,35 +1911,26 @@
         }
         if (jabatan === 'kepala_unit') {
           setTimeout(() => {
-            alert('Foto terkirim.\n\nKirim video body check manual ke chat yang sama.');
+            alert('Foto terkirim.\nKirim video body check manual ke chat yang sama.');
           }, 300);
         }
       }).catch((err) => {
-        if (err && err.name === 'AbortError') {
-          if (btn) { btn.disabled = false; btn.textContent = oldText; btn.className = 'btn btn-wa'; }
-          return;
-        }
-        // Coba sekali lagi tanpa teks (masih bisa gagal kalau gesture sudah habis)
-        navigator.share(dataFilesOnly).then(() => {
+        if (err && err.name === 'AbortError') return;
+        // Coba tanpa teks dalam gesture yang sama (jarang berhasil kalau sudah throw)
+        navigator.share(filesOnly).then(() => {
+          closeModal();
           markSent(cabang, jabatan);
           updateProgress(jabatan);
-          if (btn) {
-            btn.textContent = '✓ Terkirim';
-            btn.className = 'btn btn-sent';
-            btn.disabled = true;
-          }
         }).catch((err2) => {
           if (err2 && err2.name === 'AbortError') return;
-          const d = (err && (err.name || err.message)) ? `\n\n(${err.name || ''} ${err.message || ''})` : '';
-          alert('Gagal kirim ke WhatsApp.' + d);
-          if (btn) { btn.disabled = false; btn.textContent = oldText || 'Kirim ke WA'; btn.className = 'btn btn-wa'; }
+          const d = (err && (err.name || err.message)) ? (err.name + ' ' + (err.message || '')) : 'unknown';
+          alert('Gagal share.\n\n' + d + '\n\nTips: kirim 1 foto dulu. Pastikan foto baru diambil (bukan dari draft lama).');
         });
       });
     }
 
-    // tetap ada biar tombol modal lama tidak error kalau terpanggil
     function prepareSendWA() { sendToWA(); }
-    function openWhatsApp() { sendToWA(); }
+    function openWhatsApp() { doShareNow(); }
     function closeModal() {
       const m = document.getElementById('modalWA');
       if (m) m.classList.remove('show');
