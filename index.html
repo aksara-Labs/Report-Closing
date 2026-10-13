@@ -1061,15 +1061,15 @@
         return;
       }
 
-      const total = countRequired(jabatan);
       const filled = countFilled(jabatan);
       const sent = isSent(cabang, jabatan);
 
+      // Trial: boleh kirim meski 1 foto saja
       if (sent) {
         btn.disabled = true;
         btn.textContent = '✓ Terkirim';
         btn.className = 'btn btn-sent';
-      } else if (filled === total && total > 0) {
+      } else if (filled >= 1) {
         btn.disabled = false;
         btn.textContent = 'Kirim ke WA';
         btn.className = 'btn btn-wa';
@@ -1080,22 +1080,44 @@
       }
     }
 
+    let _saveTimer = null;
     function saveToStorage() {
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) return;
 
-      const data = {
-        cabang,
-        jabatan,
-        photos: currentPhotos,
-        updatedAt: new Date().toISOString()
-      };
-      try {
-        localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify(data));
-      } catch (e) {
-        console.warn('localStorage penuh, foto tidak disimpan permanen', e);
-      }
+      // Debounce biar tidak lemot
+      clearTimeout(_saveTimer);
+      _saveTimer = setTimeout(() => {
+        const data = {
+          cabang,
+          jabatan,
+          photos: currentPhotos,
+          updatedAt: new Date().toISOString()
+        };
+        try {
+          localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify(data));
+        } catch (e) {
+          // Quota penuh: coba kompres lebih agresif / hapus lama
+          console.warn('localStorage penuh', e);
+          try {
+            // Simpan versi ringkas: max 8 foto
+            const slim = {};
+            let n = 0;
+            Object.keys(currentPhotos).forEach(id => {
+              if (n >= 8) return;
+              slim[id] = (currentPhotos[id] || []).slice(0, 1);
+              n++;
+            });
+            localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
+              cabang, jabatan, photos: slim, updatedAt: new Date().toISOString()
+            }));
+            alert('Penyimpanan HP hampir penuh. Sebagian draft mungkin tidak tersimpan. Segera kirim ke WA.');
+          } catch (e2) {
+            alert('Gagal simpan draft (storage penuh). Kirim ke WA sekarang sebelum keluar.');
+          }
+        }
+      }, 300);
     }
 
     function loadFromStorage(cabang, jabatan) {
@@ -1249,66 +1271,75 @@
       return `${hari} · ${jam}`;
     }
 
-    // Stempel tanggal/jam di foto (app web tidak bisa paksa watermark kamera HP)
+    // Stempel tanggal/jam di foto — selalu lewat canvas (lebih andal)
     function stampTimestampOnImage(file) {
       return new Promise((resolve) => {
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const maxW = 1600;
-            let w = img.width;
-            let h = img.height;
-            if (w > maxW) {
-              h = Math.round(h * (maxW / w));
-              w = maxW;
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, w, h);
-
-            const text = formatStampNow();
-            const fontSize = Math.max(18, Math.floor(w / 26));
-            ctx.font = `bold ${fontSize}px "Plus Jakarta Sans", sans-serif`;
-            const padX = Math.round(fontSize * 0.55);
-            const padY = Math.round(fontSize * 0.4);
-            const tw = ctx.measureText(text).width;
-            const boxW = tw + padX * 2;
-            const boxH = fontSize + padY * 2;
-            const x = padX;
-            const y = h - boxH - padX;
-
-            ctx.fillStyle = 'rgba(0,0,0,0.55)';
-            ctx.beginPath();
-            if (ctx.roundRect) ctx.roundRect(x, y, boxW, boxH, 8);
-            else ctx.rect(x, y, boxW, boxH);
-            ctx.fill();
-
-            ctx.fillStyle = '#ffffff';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(text, x + padX, y + boxH / 2);
-
-            canvas.toBlob((blob) => {
-              URL.revokeObjectURL(url);
-              if (!blob) {
+        const reader = new FileReader();
+        reader.onerror = () => resolve(file);
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => resolve(file);
+          img.onload = () => {
+            try {
+              // Kompres + stempel (lebih ringan, web tidak lemot)
+              const maxW = 1200;
+              let w = img.naturalWidth || img.width;
+              let h = img.naturalHeight || img.height;
+              if (!w || !h) {
                 resolve(file);
                 return;
               }
-              const name = (file.name || 'foto').replace(/\.[^.]+$/, '') + '_ts.jpg';
-              resolve(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
-            }, 'image/jpeg', 0.9);
-          } catch (e) {
-            URL.revokeObjectURL(url);
-            resolve(file);
-          }
+              if (w > maxW) {
+                h = Math.round(h * (maxW / w));
+                w = maxW;
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#000';
+              ctx.fillRect(0, 0, w, h);
+              ctx.drawImage(img, 0, 0, w, h);
+
+              const text = formatStampNow();
+              const fontSize = Math.max(20, Math.round(w / 22));
+              ctx.font = `bold ${fontSize}px sans-serif`;
+              const pad = Math.round(fontSize * 0.5);
+              const tw = ctx.measureText(text).width;
+              const boxW = tw + pad * 2;
+              const boxH = fontSize + pad;
+              const x = pad;
+              const y = h - boxH - pad;
+
+              // Background hitam tebal biar selalu kebaca
+              ctx.fillStyle = 'rgba(0,0,0,0.72)';
+              ctx.fillRect(x, y, boxW, boxH);
+              // Teks putih + outline
+              ctx.lineWidth = Math.max(2, Math.round(fontSize / 12));
+              ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+              ctx.fillStyle = '#ffffff';
+              ctx.textBaseline = 'middle';
+              const tx = x + pad;
+              const ty = y + boxH / 2;
+              ctx.strokeText(text, tx, ty);
+              ctx.fillText(text, tx, ty);
+
+              canvas.toBlob((blob) => {
+                if (!blob) {
+                  resolve(file);
+                  return;
+                }
+                const name = (file.name || 'foto').replace(/\.[^.]+$/, '') + '_ts.jpg';
+                resolve(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
+              }, 'image/jpeg', 0.78);
+            } catch (e) {
+              console.warn('stamp gagal', e);
+              resolve(file);
+            }
+          };
+          img.src = reader.result;
         };
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          resolve(file);
-        };
-        img.src = url;
+        reader.readAsDataURL(file);
       });
     }
 
@@ -1505,55 +1536,96 @@
       if (sent) {
         document.getElementById('checklistSummary').textContent =
           'Laporan sudah dikirim ke WhatsApp.';
-      } else if (filled === total) {
+      } else if (filled >= 1) {
         document.getElementById('checklistSummary').textContent =
-          'Semua item sudah terisi. Siap dikirim ke WhatsApp.';
+          filled === total
+            ? 'Semua item terisi. Siap dikirim.'
+            : `${filled} foto siap. Boleh kirim dulu (mode trial) — sisa ${total - filled} item opsional.`;
       } else {
         document.getElementById('checklistSummary').textContent =
-          `Masih kurang ${total - filled} item.`;
+          'Ambil minimal 1 foto untuk mulai kirim (trial).';
       }
 
       updateSendButton();
     }
 
     function saveDraft() {
-      saveToStorage();
-      alert('Data berhasil disimpan sementara di perangkat ini.');
+      // Simpan langsung (tanpa debounce)
+      const cabang = document.getElementById('cabang').value;
+      const jabatan = document.getElementById('jabatan').value;
+      if (!cabang || !jabatan) {
+        alert('Pilih cabang & jabatan dulu.');
+        return;
+      }
+      try {
+        localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
+          cabang, jabatan, photos: currentPhotos, updatedAt: new Date().toISOString()
+        }));
+        alert('Draft tersimpan di HP ini.\nBuka lagi web app → pilih cabang & jabatan yang sama, foto akan muncul kembali.');
+      } catch (e) {
+        alert('Gagal simpan draft (storage penuh). Kurangi jumlah foto atau segera kirim ke WA.');
+      }
     }
 
     // ========== WA ==========
+    function dataURLtoFile(dataUrl, filename) {
+      try {
+        const arr = dataUrl.split(',');
+        const mime = (arr[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+        const bstr = atob(arr[1] || '');
+        const u8 = new Uint8Array(bstr.length);
+        for (let i = 0; i < bstr.length; i++) u8[i] = bstr.charCodeAt(i);
+        return new File([u8], filename, { type: mime, lastModified: Date.now() });
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Bangun file untuk share: dari memory ATAU dari draft (dataURL)
     function collectOrderedFiles(jabatan) {
-      // Urut sesuai checklist. Rename 01_, 02_, … biar WA menampilkan berurutan.
-      // File pertama = item checklist pertama (yang dapat caption teks).
       const list = getChecklist(jabatan) || [];
       const ordered = [];
       let n = 1;
 
-      const pushFiles = (itemId, label) => {
-        const arr = currentFiles[itemId] || [];
-        arr.forEach((file, i) => {
-          if (!(file instanceof File || file instanceof Blob)) return;
-          const isVid = (file.type || '').startsWith('video/');
+      const pushItem = (itemId, label) => {
+        const memFiles = currentFiles[itemId] || [];
+        const photos = currentPhotos[itemId] || [];
+
+        if (memFiles.length) {
+          memFiles.forEach((file, i) => {
+            if (!(file instanceof File || file instanceof Blob)) return;
+            const isVid = (file.type || '').startsWith('video/');
+            const ext = isVid ? 'mp4' : 'jpg';
+            const num = String(n).padStart(2, '0');
+            const safe = String(label || 'foto').replace(/[^\w\u00C0-\u024F\s-]/g, '').trim().replace(/\s+/g, '_').substring(0, 28) || 'foto';
+            const name = `${num}_${safe}${memFiles.length > 1 ? '_' + (i + 1) : ''}.${ext}`;
+            ordered.push(new File([file], name, { type: file.type || (isVid ? 'video/mp4' : 'image/jpeg'), lastModified: Date.now() }));
+            n++;
+          });
+          return;
+        }
+
+        // Fallback draft: rebuild File dari dataURL (biar kirim tetap jalan setelah refresh)
+        photos.forEach((p, i) => {
+          if (!p || !p.data) return;
+          const isVid = p.type === 'video';
           const ext = isVid ? 'mp4' : 'jpg';
           const num = String(n).padStart(2, '0');
-          const safe = String(label || 'foto')
-            .replace(/[^\w\u00C0-\u024F\s-]/g, '')
-            .trim()
-            .replace(/\s+/g, '_')
-            .substring(0, 28) || 'foto';
-          const name = `${num}_${safe}${arr.length > 1 ? '_' + (i + 1) : ''}.${ext}`;
-          const type = file.type || (isVid ? 'video/mp4' : 'image/jpeg');
-          // Clone dengan nama urut — isi binary tetap file asli
-          ordered.push(new File([file], name, { type, lastModified: file.lastModified || Date.now() }));
-          n++;
+          const safe = String(label || 'foto').replace(/[^\w\u00C0-\u024F\s-]/g, '').trim().replace(/\s+/g, '_').substring(0, 28) || 'foto';
+          const name = `${num}_${safe}${photos.length > 1 ? '_' + (i + 1) : ''}.${ext}`;
+          const f = dataURLtoFile(p.data, name);
+          if (f) {
+            ordered.push(f);
+            n++;
+          }
         });
       };
 
       list.forEach((item, idx) => {
         if (item.multi) {
-          item.subs.forEach((sub, sidx) => pushFiles(sub.id, `${idx + 1}${sidx + 1}_${sub.title}`));
+          item.subs.forEach((sub, sidx) => pushItem(sub.id, `${idx + 1}${sidx + 1}_${sub.title}`));
         } else {
-          pushFiles(item.id, `${idx + 1}_${item.title}`);
+          pushItem(item.id, `${idx + 1}_${item.title}`);
         }
       });
 
