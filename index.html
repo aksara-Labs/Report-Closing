@@ -1050,28 +1050,49 @@
       localStorage.setItem(sentKey(cabang, jabatan), '1');
     }
 
+    function clearSent(cabang, jabatan) {
+      localStorage.removeItem(sentKey(cabang, jabatan));
+    }
+
+    // Hapus draft lama (bukan hari ini) biar storage tidak penuh
+    function purgeOldDrafts() {
+      const keep = currentDateKey;
+      const toDel = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith('ltc_') && !k.includes(keep)) toDel.push(k);
+      }
+      toDel.forEach(k => localStorage.removeItem(k));
+    }
+
     function updateSendButton() {
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       const btn = document.getElementById('btnKirimWA');
+      if (!btn) return;
+
       if (!cabang || !jabatan) {
+        btn.disabled = true;
+        btn.removeAttribute('disabled');
         btn.disabled = true;
         btn.textContent = 'Kirim ke WA';
         btn.className = 'btn btn-wa';
         return;
       }
 
-      const filled = countFilled(jabatan);
-      const sent = isSent(cabang, jabatan);
+      // Hitung foto dari currentPhotos (lebih andal)
+      let photoCount = 0;
+      Object.keys(currentPhotos || {}).forEach(id => {
+        photoCount += (currentPhotos[id] || []).length;
+      });
 
-      // Trial: boleh kirim meski 1 foto saja
-      if (sent) {
-        btn.disabled = true;
-        btn.textContent = '✓ Terkirim';
-        btn.className = 'btn btn-sent';
-      } else if (filled >= 1) {
+      if (photoCount >= 1) {
+        // Selalu bisa kirim / kirim ulang kalau ada foto
         btn.disabled = false;
-        btn.textContent = 'Kirim ke WA';
+        btn.removeAttribute('disabled');
+        const sent = isSent(cabang, jabatan);
+        btn.textContent = sent ? 'Kirim Ulang ke WA' : 'Kirim ke WA';
         btn.className = 'btn btn-wa';
       } else {
         btn.disabled = true;
@@ -1086,38 +1107,34 @@
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) return;
 
-      // Debounce biar tidak lemot
       clearTimeout(_saveTimer);
       _saveTimer = setTimeout(() => {
+        purgeOldDrafts();
         const data = {
           cabang,
           jabatan,
           photos: currentPhotos,
           updatedAt: new Date().toISOString()
         };
+        const raw = JSON.stringify(data);
         try {
-          localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify(data));
+          localStorage.setItem(storageKey(cabang, jabatan), raw);
         } catch (e) {
-          // Quota penuh: coba kompres lebih agresif / hapus lama
-          console.warn('localStorage penuh', e);
+          console.warn('storage penuh, purge + retry', e);
+          purgeOldDrafts();
           try {
-            // Simpan versi ringkas: max 8 foto
-            const slim = {};
-            let n = 0;
-            Object.keys(currentPhotos).forEach(id => {
-              if (n >= 8) return;
-              slim[id] = (currentPhotos[id] || []).slice(0, 1);
-              n++;
-            });
-            localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
-              cabang, jabatan, photos: slim, updatedAt: new Date().toISOString()
-            }));
-            alert('Penyimpanan HP hampir penuh. Sebagian draft mungkin tidak tersimpan. Segera kirim ke WA.');
+            localStorage.setItem(storageKey(cabang, jabatan), raw);
           } catch (e2) {
-            alert('Gagal simpan draft (storage penuh). Kirim ke WA sekarang sebelum keluar.');
+            // Simpan meta saja (tanpa foto besar) — foto tetap di memory sesi ini
+            try {
+              localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
+                cabang, jabatan, photos: {}, updatedAt: new Date().toISOString(), noPhotos: true
+              }));
+            } catch (_) {}
+            console.warn('Draft foto tidak tersimpan (quota). Masih bisa kirim di sesi ini.');
           }
         }
-      }, 300);
+      }, 400);
     }
 
     function loadFromStorage(cabang, jabatan) {
@@ -1271,72 +1288,98 @@
       return `${hari} · ${jam}`;
     }
 
-    // Stempel tanggal/jam di foto — selalu lewat canvas (lebih andal)
+    function drawStamp(ctx, w, h) {
+      const text = formatStampNow();
+      const fontSize = Math.max(28, Math.round(w / 18));
+      ctx.save();
+      ctx.font = `bold ${fontSize}px Arial, sans-serif`;
+      const pad = Math.round(fontSize * 0.55);
+      const tw = ctx.measureText(text).width;
+      const boxW = tw + pad * 2;
+      const boxH = fontSize + pad * 1.2;
+
+      // Stempel di BAWAH kiri (besar & jelas)
+      const x = pad;
+      const y = h - boxH - pad;
+      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      ctx.fillRect(x, y, boxW, boxH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + pad, y + boxH / 2);
+
+      // Stempel cadangan di ATAS kiri
+      const y2 = pad;
+      ctx.fillStyle = 'rgba(0,0,0,0.75)';
+      ctx.fillRect(x, y2, boxW, boxH);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(text, x + pad, y2 + boxH / 2);
+      ctx.restore();
+    }
+
+    // Stempel timestamp — wajib lewat canvas
     function stampTimestampOnImage(file) {
       return new Promise((resolve) => {
+        const done = (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const name = (file.name || 'foto').replace(/\.[^.]+$/, '') + '_ts.jpg';
+          resolve(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
+        };
+
+        const paint = (bitmapOrImg, sw, sh) => {
+          try {
+            const maxW = 1280;
+            let w = sw;
+            let h = sh;
+            if (w > maxW) {
+              h = Math.round(h * (maxW / w));
+              w = maxW;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, w, h);
+            ctx.drawImage(bitmapOrImg, 0, 0, w, h);
+            drawStamp(ctx, w, h);
+            canvas.toBlob(done, 'image/jpeg', 0.82);
+          } catch (e) {
+            console.warn('stamp paint gagal', e);
+            resolve(file);
+          }
+        };
+
+        // 1) createImageBitmap (paling andal di Android Chrome)
+        if (typeof createImageBitmap === 'function') {
+          createImageBitmap(file)
+            .then((bmp) => {
+              paint(bmp, bmp.width, bmp.height);
+              try { bmp.close(); } catch (_) {}
+            })
+            .catch(() => {
+              // 2) fallback FileReader
+              const reader = new FileReader();
+              reader.onerror = () => resolve(file);
+              reader.onload = () => {
+                const img = new Image();
+                img.onload = () => paint(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
+                img.onerror = () => resolve(file);
+                img.src = reader.result;
+              };
+              reader.readAsDataURL(file);
+            });
+          return;
+        }
+
         const reader = new FileReader();
         reader.onerror = () => resolve(file);
         reader.onload = () => {
           const img = new Image();
+          img.onload = () => paint(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
           img.onerror = () => resolve(file);
-          img.onload = () => {
-            try {
-              // Kompres + stempel (lebih ringan, web tidak lemot)
-              const maxW = 1200;
-              let w = img.naturalWidth || img.width;
-              let h = img.naturalHeight || img.height;
-              if (!w || !h) {
-                resolve(file);
-                return;
-              }
-              if (w > maxW) {
-                h = Math.round(h * (maxW / w));
-                w = maxW;
-              }
-              const canvas = document.createElement('canvas');
-              canvas.width = w;
-              canvas.height = h;
-              const ctx = canvas.getContext('2d');
-              ctx.fillStyle = '#000';
-              ctx.fillRect(0, 0, w, h);
-              ctx.drawImage(img, 0, 0, w, h);
-
-              const text = formatStampNow();
-              const fontSize = Math.max(20, Math.round(w / 22));
-              ctx.font = `bold ${fontSize}px sans-serif`;
-              const pad = Math.round(fontSize * 0.5);
-              const tw = ctx.measureText(text).width;
-              const boxW = tw + pad * 2;
-              const boxH = fontSize + pad;
-              const x = pad;
-              const y = h - boxH - pad;
-
-              // Background hitam tebal biar selalu kebaca
-              ctx.fillStyle = 'rgba(0,0,0,0.72)';
-              ctx.fillRect(x, y, boxW, boxH);
-              // Teks putih + outline
-              ctx.lineWidth = Math.max(2, Math.round(fontSize / 12));
-              ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-              ctx.fillStyle = '#ffffff';
-              ctx.textBaseline = 'middle';
-              const tx = x + pad;
-              const ty = y + boxH / 2;
-              ctx.strokeText(text, tx, ty);
-              ctx.fillText(text, tx, ty);
-
-              canvas.toBlob((blob) => {
-                if (!blob) {
-                  resolve(file);
-                  return;
-                }
-                const name = (file.name || 'foto').replace(/\.[^.]+$/, '') + '_ts.jpg';
-                resolve(new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() }));
-              }, 'image/jpeg', 0.78);
-            } catch (e) {
-              console.warn('stamp gagal', e);
-              resolve(file);
-            }
-          };
           img.src = reader.result;
         };
         reader.readAsDataURL(file);
@@ -1344,7 +1387,15 @@
     }
 
     function pushAcceptedFile(itemId, file, isVideo) {
+      if (!currentFiles[itemId]) currentFiles[itemId] = [];
+      if (!currentPhotos[itemId]) currentPhotos[itemId] = [];
       currentFiles[itemId].push(file);
+
+      // Foto baru → boleh kirim ulang
+      const cabang = document.getElementById('cabang').value;
+      const jabatan = document.getElementById('jabatan').value;
+      if (cabang && jabatan) clearSent(cabang, jabatan);
+
       const reader = new FileReader();
       reader.onload = (e) => {
         currentPhotos[itemId].push({
@@ -1355,6 +1406,7 @@
         renderPreviews(itemId);
         markItemFilled(itemId);
         updateProgress(document.getElementById('jabatan').value);
+        updateSendButton();
         saveToStorage();
       };
       reader.readAsDataURL(file);
@@ -1550,20 +1602,36 @@
     }
 
     function saveDraft() {
-      // Simpan langsung (tanpa debounce)
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) {
         alert('Pilih cabang & jabatan dulu.');
         return;
       }
+      purgeOldDrafts();
       try {
         localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
           cabang, jabatan, photos: currentPhotos, updatedAt: new Date().toISOString()
         }));
-        alert('Draft tersimpan di HP ini.\nBuka lagi web app → pilih cabang & jabatan yang sama, foto akan muncul kembali.');
+        alert('Draft tersimpan.\nBuka lagi → pilih cabang & jabatan yang sama.');
       } catch (e) {
-        alert('Gagal simpan draft (storage penuh). Kurangi jumlah foto atau segera kirim ke WA.');
+        // Bersihkan semua draft LTC lalu coba sekali lagi
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('ltc_')) keys.push(k);
+        }
+        keys.forEach(k => {
+          if (k !== storageKey(cabang, jabatan)) localStorage.removeItem(k);
+        });
+        try {
+          localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
+            cabang, jabatan, photos: currentPhotos, updatedAt: new Date().toISOString()
+          }));
+          alert('Draft tersimpan (setelah bersihkan data lama).');
+        } catch (e2) {
+          alert('Storage HP penuh.\n\nSolusi:\n1. Kirim foto ke WA sekarang (masih di memori)\n2. Chrome → setelan situs → hapus data\n3. Atau kurangi jumlah foto');
+        }
       }
     }
 
@@ -1836,6 +1904,7 @@
     // ========== INIT ==========
     currentDateKey = getTodayKey();
     document.getElementById('dateDisplay').textContent = formatDateID();
+    try { purgeOldDrafts(); } catch (_) {}
   </script>
 </body>
 </html>
