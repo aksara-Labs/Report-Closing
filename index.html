@@ -1293,12 +1293,12 @@
                 <div class="file-actions">
                   <div class="file-input-wrap">
                     <input type="file" accept="image/*" capture="environment"
-                           onchange="handleFile(event, '${sub.id}', 'image')" />
+                           onchange="handleFile(event, '${sub.id}', 'image', true)" />
                     <div class="file-btn file-btn-cam">📷 Kamera</div>
                   </div>
                   <div class="file-input-wrap">
                     <input type="file" accept="image/*"
-                           onchange="handleFile(event, '${sub.id}', 'image')" multiple />
+                           onchange="handleFile(event, '${sub.id}', 'image', false)" multiple />
                     <div class="file-btn file-btn-gal">🖼️ Galeri</div>
                   </div>
                 </div>
@@ -1313,12 +1313,12 @@
             <div class="file-actions">
               <div class="file-input-wrap">
                 <input type="file" accept="${isVid ? 'video/*' : 'image/*'}" capture="environment"
-                       onchange="handleFile(event, '${item.id}', '${item.type || 'image'}')" />
+                       onchange="handleFile(event, '${item.id}', '${item.type || 'image'}', true)" />
                 <div class="file-btn file-btn-cam">${isVid ? '🎥 Kamera' : '📷 Kamera'}</div>
               </div>
               <div class="file-input-wrap">
                 <input type="file" accept="${isVid ? 'video/*' : 'image/*'}"
-                       onchange="handleFile(event, '${item.id}', '${item.type || 'image'}')" multiple />
+                       onchange="handleFile(event, '${item.id}', '${item.type || 'image'}', false)" multiple />
                 <div class="file-btn file-btn-gal">${isVid ? '📁 Galeri' : '🖼️ Galeri'}</div>
               </div>
             </div>
@@ -1462,7 +1462,7 @@
       reader.readAsDataURL(file);
     }
 
-    async function handleFile(event, itemId, mediaType) {
+    async function handleFile(event, itemId, mediaType, fromCamera) {
       const files = Array.from(event.target.files || []);
       event.target.value = '';
       if (!files.length) return;
@@ -1507,10 +1507,13 @@
             };
             vid.src = url;
           });
-        } else {
-          // Foto: tambah timestamp di pojok
+        } else if (fromCamera) {
+          // Timestamp HANYA dari kamera
           const stamped = await stampTimestampOnImage(file);
           pushAcceptedFile(itemId, stamped, false);
+        } else {
+          // Galeri: tanpa timestamp
+          pushAcceptedFile(itemId, file, false);
         }
       }
     }
@@ -1825,7 +1828,9 @@
       return out;
     }
 
-    async function sendToWA() {
+    function sendToWA() {
+      // PENTING: jangan await apa pun SEBELUM navigator.share
+      // (kalau await dulu → NotAllowedError: Must be handling a user gesture)
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) return;
@@ -1840,73 +1845,70 @@
       const msg = `LAPORAN TUTUP CABANG\n${cabang} · ${label}\n${tanggal}`;
 
       const raw = collectOrderedFiles(jabatan);
-      if (!raw.length) {
+      // Hanya foto, nama pendek, SYNC (tanpa canvas/await)
+      const files = raw
+        .filter(f => f && ((f.type || '').startsWith('image/') || f.type === '' || !f.type))
+        .map((f, i) => new File([f], String(i + 1).padStart(2, '0') + '.jpg', {
+          type: (f.type && f.type.startsWith('image/')) ? f.type : 'image/jpeg',
+          lastModified: Date.now()
+        }));
+
+      if (!files.length) {
         alert('Belum ada foto. Ambil minimal 1 foto dulu.');
         return;
       }
 
       const btn = document.getElementById('btnKirimWA');
-      const oldText = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = 'Menyiapkan...';
+      const oldText = btn ? btn.textContent : '';
 
-      let files = [];
-      try {
-        files = await normalizeShareFiles(raw);
-      } catch (e) {
-        files = raw.filter(f => (f.type || '').startsWith('image/'));
-      }
+      const dataWithText = { files, text: msg };
+      const dataFilesOnly = { files };
 
-      if (!files.length) {
-        btn.disabled = false;
-        btn.textContent = oldText;
-        alert('Tidak ada foto yang bisa dikirim.');
-        return;
-      }
-
-      btn.textContent = 'Pilih WhatsApp...';
-
-      const attempts = [
-        { files: files, text: msg },
-        { files: files },
-        { files: files.slice(0, 5), text: msg },
-        { files: files.slice(0, 3) },
-        { files: files.slice(0, 1), text: msg }
-      ];
-
-      let lastErr = null;
-      for (const data of attempts) {
-        try {
-          if (navigator.canShare && !navigator.canShare(data)) continue;
-          await navigator.share(data);
-          // sukses
-          markSent(cabang, jabatan);
-          updateProgress(jabatan);
-          btn.textContent = '✓ Terkirim';
-          btn.className = 'btn btn-sent';
-          if (jabatan === 'kepala_unit') {
-            setTimeout(() => {
-              alert('Foto terkirim.\n\nKirim video body check manual ke chat yang sama.');
-            }, 300);
-          }
+      let shareData = dataWithText;
+      if (navigator.canShare) {
+        if (navigator.canShare(dataWithText)) shareData = dataWithText;
+        else if (navigator.canShare(dataFilesOnly)) shareData = dataFilesOnly;
+        else {
+          alert('Browser menolak share file ini. Coba kurangi jumlah foto.');
           return;
-        } catch (err) {
-          if (err && err.name === 'AbortError') {
-            // user batal — bukan gagal teknis
-            btn.disabled = false;
-            btn.textContent = oldText;
-            btn.className = 'btn btn-wa';
-            return;
-          }
-          lastErr = err;
         }
       }
 
-      btn.disabled = false;
-      btn.textContent = oldText;
-      btn.className = 'btn btn-wa';
-      const detail = lastErr ? `\n\n(${lastErr.name || ''} ${lastErr.message || ''})` : '';
-      alert('Gagal kirim foto ke WhatsApp.' + detail + '\n\nCoba kirim 1–3 foto dulu (mode trial).');
+      // Langsung share — masih dalam user gesture (klik tombol)
+      navigator.share(shareData).then(() => {
+        markSent(cabang, jabatan);
+        updateProgress(jabatan);
+        if (btn) {
+          btn.textContent = '✓ Terkirim';
+          btn.className = 'btn btn-sent';
+          btn.disabled = true;
+        }
+        if (jabatan === 'kepala_unit') {
+          setTimeout(() => {
+            alert('Foto terkirim.\n\nKirim video body check manual ke chat yang sama.');
+          }, 300);
+        }
+      }).catch((err) => {
+        if (err && err.name === 'AbortError') {
+          if (btn) { btn.disabled = false; btn.textContent = oldText; btn.className = 'btn btn-wa'; }
+          return;
+        }
+        // Coba sekali lagi tanpa teks (masih bisa gagal kalau gesture sudah habis)
+        navigator.share(dataFilesOnly).then(() => {
+          markSent(cabang, jabatan);
+          updateProgress(jabatan);
+          if (btn) {
+            btn.textContent = '✓ Terkirim';
+            btn.className = 'btn btn-sent';
+            btn.disabled = true;
+          }
+        }).catch((err2) => {
+          if (err2 && err2.name === 'AbortError') return;
+          const d = (err && (err.name || err.message)) ? `\n\n(${err.name || ''} ${err.message || ''})` : '';
+          alert('Gagal kirim ke WhatsApp.' + d);
+          if (btn) { btn.disabled = false; btn.textContent = oldText || 'Kirim ke WA'; btn.className = 'btn btn-wa'; }
+        });
+      });
     }
 
     // tetap ada biar tombol modal lama tidak error kalau terpanggil
