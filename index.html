@@ -1101,6 +1101,66 @@
       }
     }
 
+    // IndexedDB — kapasitas jauh lebih besar dari localStorage (solusi storage penuh)
+    const IDB_NAME = 'LTC_Drafts_v1';
+    const IDB_STORE = 'drafts';
+
+    function openIDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function idbSet(key, value) {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(value, key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function idbGet(key) {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly');
+        const req = tx.objectStore(IDB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function idbDel(key) {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).delete(key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    // Kosongkan localStorage draft foto lama (penyebab "storage penuh")
+    function clearHeavyLocalStorage() {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('ltc_') && !k.startsWith('ltc_sent_') && k !== CUSTOM_KEY)) {
+          keys.push(k);
+        }
+      }
+      keys.forEach(k => {
+        try { localStorage.removeItem(k); } catch (_) {}
+      });
+    }
+
     let _saveTimer = null;
     function saveToStorage() {
       const cabang = document.getElementById('cabang').value;
@@ -1108,40 +1168,38 @@
       if (!cabang || !jabatan) return;
 
       clearTimeout(_saveTimer);
-      _saveTimer = setTimeout(() => {
-        purgeOldDrafts();
+      _saveTimer = setTimeout(async () => {
         const data = {
           cabang,
           jabatan,
           photos: currentPhotos,
           updatedAt: new Date().toISOString()
         };
-        const raw = JSON.stringify(data);
         try {
-          localStorage.setItem(storageKey(cabang, jabatan), raw);
+          clearHeavyLocalStorage(); // bebaskan localStorage
+          await idbSet(storageKey(cabang, jabatan), data);
         } catch (e) {
-          console.warn('storage penuh, purge + retry', e);
-          purgeOldDrafts();
-          try {
-            localStorage.setItem(storageKey(cabang, jabatan), raw);
-          } catch (e2) {
-            // Simpan meta saja (tanpa foto besar) — foto tetap di memory sesi ini
-            try {
-              localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
-                cabang, jabatan, photos: {}, updatedAt: new Date().toISOString(), noPhotos: true
-              }));
-            } catch (_) {}
-            console.warn('Draft foto tidak tersimpan (quota). Masih bisa kirim di sesi ini.');
-          }
+          console.warn('IDB save gagal', e);
         }
-      }, 400);
+      }, 350);
     }
 
-    function loadFromStorage(cabang, jabatan) {
-      const raw = localStorage.getItem(storageKey(cabang, jabatan));
-      if (!raw) return null;
+    async function loadFromStorage(cabang, jabatan) {
+      const key = storageKey(cabang, jabatan);
       try {
-        return JSON.parse(raw);
+        const fromIdb = await idbGet(key);
+        if (fromIdb) return fromIdb;
+      } catch (e) {
+        console.warn('IDB load gagal', e);
+      }
+      // fallback lama (localStorage) lalu pindahkan ke IDB
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        try { await idbSet(key, parsed); } catch (_) {}
+        try { localStorage.removeItem(key); } catch (_) {}
+        return parsed;
       } catch {
         return null;
       }
@@ -1174,7 +1232,7 @@
       switchTab('admin');
     }
 
-    function onSelectionChange() {
+    async function onSelectionChange() {
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
 
@@ -1193,10 +1251,9 @@
       document.getElementById('itemsCard').style.display = 'block';
       document.getElementById('footerActions').style.display = 'flex';
 
-      // Load existing (preview saja; File asli untuk share hanya ada di sesi ini)
-      const saved = loadFromStorage(cabang, jabatan);
+      const saved = await loadFromStorage(cabang, jabatan);
       currentPhotos = saved ? (saved.photos || {}) : {};
-      currentFiles = {}; // File tidak bisa disimpan di localStorage
+      currentFiles = {};
 
       renderItems(jabatan);
       updateProgress(jabatan);
@@ -1298,7 +1355,7 @@
       const boxW = tw + pad * 2;
       const boxH = fontSize + pad * 1.2;
 
-      // Stempel di BAWAH kiri (besar & jelas)
+      // Stempel HANYA di bawah kiri
       const x = pad;
       const y = h - boxH - pad;
       ctx.fillStyle = 'rgba(0,0,0,0.8)';
@@ -1306,13 +1363,6 @@
       ctx.fillStyle = '#FFFFFF';
       ctx.textBaseline = 'middle';
       ctx.fillText(text, x + pad, y + boxH / 2);
-
-      // Stempel cadangan di ATAS kiri
-      const y2 = pad;
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.fillRect(x, y2, boxW, boxH);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(text, x + pad, y2 + boxH / 2);
       ctx.restore();
     }
 
@@ -1601,37 +1651,22 @@
       updateSendButton();
     }
 
-    function saveDraft() {
+    async function saveDraft() {
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) {
         alert('Pilih cabang & jabatan dulu.');
         return;
       }
-      purgeOldDrafts();
       try {
-        localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
+        clearHeavyLocalStorage();
+        await idbSet(storageKey(cabang, jabatan), {
           cabang, jabatan, photos: currentPhotos, updatedAt: new Date().toISOString()
-        }));
-        alert('Draft tersimpan.\nBuka lagi → pilih cabang & jabatan yang sama.');
-      } catch (e) {
-        // Bersihkan semua draft LTC lalu coba sekali lagi
-        const keys = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith('ltc_')) keys.push(k);
-        }
-        keys.forEach(k => {
-          if (k !== storageKey(cabang, jabatan)) localStorage.removeItem(k);
         });
-        try {
-          localStorage.setItem(storageKey(cabang, jabatan), JSON.stringify({
-            cabang, jabatan, photos: currentPhotos, updatedAt: new Date().toISOString()
-          }));
-          alert('Draft tersimpan (setelah bersihkan data lama).');
-        } catch (e2) {
-          alert('Storage HP penuh.\n\nSolusi:\n1. Kirim foto ke WA sekarang (masih di memori)\n2. Chrome → setelan situs → hapus data\n3. Atau kurangi jumlah foto');
-        }
+        alert('Draft tersimpan di HP (IndexedDB).\nBuka lagi → pilih cabang & jabatan yang sama.');
+      } catch (e) {
+        console.warn(e);
+        alert('Gagal simpan draft.\nCoba: Chrome → setelan situs → hapus data, lalu isi ulang.\nFoto di layar ini masih bisa dikirim ke WA.');
       }
     }
 
@@ -1651,9 +1686,10 @@
 
     // Bangun file untuk share: dari memory ATAU dari draft (dataURL)
     function collectOrderedFiles(jabatan) {
+      // Mulai dari 02 — nomor 01 dikhususkan untuk cover teks
       const list = getChecklist(jabatan) || [];
       const ordered = [];
-      let n = 1;
+      let n = 2;
 
       const pushItem = (itemId, label) => {
         const memFiles = currentFiles[itemId] || [];
@@ -1673,7 +1709,6 @@
           return;
         }
 
-        // Fallback draft: rebuild File dari dataURL (biar kirim tetap jalan setelah refresh)
         photos.forEach((p, i) => {
           if (!p || !p.data) return;
           const isVid = p.type === 'video';
@@ -1700,18 +1735,63 @@
       return ordered;
     }
 
-    function prepareSendWA() {
+    // Gambar #1: cover berisi teks laporan (semua divisi)
+    function createCoverImage(cabang, label, tanggal) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1080;
+        const ctx = canvas.getContext('2d');
+
+        const g = ctx.createLinearGradient(0, 0, 1080, 1080);
+        g.addColorStop(0, '#4f46e5');
+        g.addColorStop(0.5, '#6366f1');
+        g.addColorStop(1, '#1e1b4b');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 1080, 1080);
+
+        // kartu putih semi
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(80, 340, 920, 400);
+
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 48px Arial, sans-serif';
+        ctx.fillText('LAPORAN TUTUP CABANG', 540, 460);
+
+        ctx.font = 'bold 42px Arial, sans-serif';
+        ctx.fillText(`${cabang}  ·  ${label}`, 540, 540);
+
+        ctx.font = '30px Arial, sans-serif';
+        ctx.fillStyle = '#c7d2fe';
+        ctx.fillText(tanggal, 540, 620);
+
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(null);
+            return;
+          }
+          resolve(new File([blob], '01_LAPORAN_COVER.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
+        }, 'image/jpeg', 0.92);
+      });
+    }
+
+    async function prepareSendWA() {
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
       if (!cabang || !jabatan) return;
 
       const label = JABATAN_LABEL[jabatan];
       const tanggal = formatDateID();
-      const allFiles = collectOrderedFiles(jabatan);
+      const photoFiles = collectOrderedFiles(jabatan);
 
       let msg = `LAPORAN TUTUP CABANG\n`;
       msg += `${cabang} · ${label}\n`;
       msg += `${tanggal}`;
+
+      // Cover teks = gambar no.1, foto checklist mulai no.2
+      const cover = await createCoverImage(cabang, label, tanggal);
+      const allFiles = cover ? [cover, ...photoFiles] : photoFiles;
 
       window._waMessage = msg;
       window._waFiles = allFiles;
@@ -1719,15 +1799,15 @@
       const previewEl = document.getElementById('waPreviewText');
       const hasShare = typeof navigator.share === 'function';
 
-      if (allFiles.length === 0) {
+      if (photoFiles.length === 0) {
         previewEl.textContent = msg +
-          '\n\n⚠️ Foto/video belum siap dikirim.\nAmbil ulang SEMUA foto/video di halaman ini (jangan refresh), baru kirim.';
+          '\n\n⚠️ Belum ada foto. Ambil minimal 1 foto dulu.';
       } else if (!hasShare) {
         previewEl.textContent = msg +
-          '\n\n⚠️ Browser tidak support share.\nPakai Google Chrome (bukan browser bawaan / dalam aplikasi).';
+          '\n\n⚠️ Browser tidak support share. Pakai Google Chrome.';
       } else {
         previewEl.textContent = msg +
-          `\n\n${allFiles.length} file siap.\nTekan tombol hijau → pilih WhatsApp.`;
+          `\n\nGambar #1 = teks laporan\nLalu ${photoFiles.length} foto checklist.\nTotal ${allFiles.length} file.\n→ Pilih WhatsApp.`;
       }
 
       document.getElementById('modalWA').classList.add('show');
@@ -1825,32 +1905,32 @@
     }
 
     // ========== STATUS KC ==========
-    function renderStatusTable() {
-      const filterCabang = document.getElementById('statusCabang').value;
+    async function renderStatusTable() {
+      const filterEl = document.getElementById('statusCabang');
+      if (!filterEl) return;
+      const filterCabang = filterEl.value;
       const tbody = document.getElementById('statusTableBody');
+      if (!tbody) return;
       tbody.innerHTML = '';
 
       const cabangs = ['GRT010', 'GRT013', 'GRT019', 'GRT020'];
       const jabatans = ['kepala_unit', 'kasir', 'gudang'];
-
       let hasAny = false;
 
-      cabangs.forEach(cab => {
-        if (filterCabang && filterCabang !== cab) return;
-
-        jabatans.forEach(jab => {
-          const data = loadFromStorage(cab, jab);
+      for (const cab of cabangs) {
+        if (filterCabang && filterCabang !== cab) continue;
+        for (const jab of jabatans) {
+          const data = await loadFromStorage(cab, jab);
           const total = countRequired(jab);
           let filled = 0;
           if (data && data.photos) {
-            const list = getChecklist(jab);
-            list.forEach(item => {
+            getChecklist(jab).forEach(item => {
               if (item.multi) {
                 item.subs.forEach(s => {
                   if (data.photos[s.id] && data.photos[s.id].length > 0) filled++;
                 });
-              } else {
-                if (data.photos[item.id] && data.photos[item.id].length > 0) filled++;
+              } else if (data.photos[item.id] && data.photos[item.id].length > 0) {
+                filled++;
               }
             });
           }
@@ -1859,15 +1939,10 @@
           const tr = document.createElement('tr');
           let statusHtml;
           const sent = isSent(cab, jab);
-          if (sent) {
-            statusHtml = `<span class="dot green"></span>Terkirim`;
-          } else if (filled === 0) {
-            statusHtml = `<span class="dot gray"></span>Belum`;
-          } else if (filled === total) {
-            statusHtml = `<span class="dot green"></span>Lengkap`;
-          } else {
-            statusHtml = `<span class="dot yellow"></span>Sebagian`;
-          }
+          if (sent) statusHtml = `<span class="dot green"></span>Terkirim`;
+          else if (filled === 0) statusHtml = `<span class="dot gray"></span>Belum`;
+          else if (filled === total) statusHtml = `<span class="dot green"></span>Lengkap`;
+          else statusHtml = `<span class="dot yellow"></span>Sebagian`;
 
           tr.innerHTML = `
             <td><strong>${cab}</strong></td>
@@ -1876,28 +1951,30 @@
             <td>${filled}/${total}</td>
           `;
           tbody.appendChild(tr);
-        });
-      });
+        }
+      }
 
       if (!hasAny) {
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#718096;">Belum ada data hari ini</td></tr>`;
       }
     }
 
-    function clearTodayData() {
+    async function clearTodayData() {
       if (!confirm('Hapus SEMUA data laporan tutup cabang hari ini dari perangkat ini?')) return;
       const cabangs = ['GRT010', 'GRT013', 'GRT019', 'GRT020'];
       const jabatans = ['kepala_unit', 'kasir', 'gudang'];
-      cabangs.forEach(c => {
-        jabatans.forEach(j => {
+      for (const c of cabangs) {
+        for (const j of jabatans) {
+          try { await idbDel(storageKey(c, j)); } catch (_) {}
           localStorage.removeItem(storageKey(c, j));
           localStorage.removeItem(sentKey(c, j));
-        });
-      });
+        }
+      }
+      clearHeavyLocalStorage();
       currentPhotos = {};
       currentFiles = {};
-      onSelectionChange();
-      renderStatusTable();
+      await onSelectionChange();
+      await renderStatusTable();
       alert('Data hari ini sudah dihapus.');
     }
 
@@ -1905,6 +1982,7 @@
     currentDateKey = getTodayKey();
     document.getElementById('dateDisplay').textContent = formatDateID();
     try { purgeOldDrafts(); } catch (_) {}
+    try { clearHeavyLocalStorage(); } catch (_) {}
   </script>
 </body>
 </html>
