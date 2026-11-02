@@ -623,8 +623,6 @@
       max-width: 660px;
       transition: transform .25s ease, opacity .2s ease;
     }
-    body.kb-open .footer-actions { transform: translateY(160%); opacity: 0; pointer-events: none; }
-    body.kb-open { padding-bottom: 24px; }
 
     /* modal jadi bottom sheet di HP */
     .modal { max-height: 90vh; max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain; }
@@ -1159,7 +1157,7 @@
   </div>
 
   <!-- Footer Actions (only on input tab when ready) -->
-  <div class="footer-actions" id="footerActions" style="display:none;">
+  <div class="footer-actions" id="footerActions" style="display:flex;">
     <button class="btn btn-wa" id="btnKirimWA" onclick="sendToWA()" disabled>
       Kirim ke WA
     </button>
@@ -1533,8 +1531,9 @@
 
       if (!cabang || !jabatan) {
         btn.disabled = true;
-        btn.textContent = 'Kirim ke WA';
+        btn.textContent = 'Pilih cabang & jabatan dulu';
         btn.className = 'btn btn-wa';
+        btn.dataset.state = 'locked';
         return;
       }
 
@@ -1923,9 +1922,7 @@
 
       const footer = document.getElementById('footerActions');
       if (tab === 'input') {
-        const cabang = document.getElementById('cabang').value;
-        const jabatan = document.getElementById('jabatan').value;
-        footer.style.display = (cabang && jabatan) ? 'flex' : 'none';
+        footer.style.display = 'flex';
       } else {
         footer.style.display = 'none';
       }
@@ -1954,7 +1951,7 @@
         if (kasirCard) kasirCard.style.display = 'none';
         if (gudangCard) gudangCard.style.display = 'none';
         document.getElementById('emptyState').style.display = 'block';
-        document.getElementById('footerActions').style.display = 'none';
+        document.getElementById('footerActions').style.display = 'flex';
         currentPhotos = {};
         currentFiles = {};
         currentSkipped = {};
@@ -2634,20 +2631,31 @@
 
       const raw = collectOrderedFiles(jabatan);
       let files = [];
-      raw.forEach((f, i) => {
-        if (!f) return;
+      // Salin isi tiap foto ke memori (ArrayBuffer) SEBELUM share. Foto dari kamera/galeri
+      // sering hanya "pinjaman" file sementara; kalau izinnya hilang, share gagal
+      // dengan NotAllowedError (Permission denied). Salinan di memori aman dibagikan.
+      const badPhotos = [];
+      for (let i = 0; i < raw.length; i++) {
+        const f = raw[i];
+        if (!f) continue;
         const t = f.type || '';
-        if (t.startsWith('video/')) return;
-        // Pakai blob asli, nama pendek
+        if (t.startsWith('video/')) continue;
+        const nm = String(i + 1).padStart(2, '0') + '.jpg';
         try {
-          files.push(new File([f], String(i + 1).padStart(2, '0') + '.jpg', {
+          const buf = await f.arrayBuffer();
+          if (!buf || !buf.byteLength) throw new Error('kosong');
+          files.push(new File([buf], nm, {
             type: t.startsWith('image/') ? t : 'image/jpeg',
             lastModified: Date.now()
           }));
         } catch (e) {
-          files.push(f);
+          badPhotos.push(nm.replace('.jpg', ''));
         }
-      });
+      }
+      if (badPhotos.length) {
+        alert('Foto nomor ' + badPhotos.join(', ') + ' tidak bisa dibaca lagi (file sementara dari HP sudah hilang).\n\nAmbil ulang foto tersebut, lalu kirim lagi.');
+        return;
+      }
 
       if (!files.length) {
         alert('Belum ada foto di memori.\nAmbil/pilih foto lagi (jangan refresh), lalu kirim.');
