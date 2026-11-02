@@ -1878,51 +1878,13 @@
     }
 
     let _saveTimer = null;
+    // Draft TIDAK disimpan lagi (sengaja dimatikan)
     function saveToStorage() {
-      if (currentDateKey && getTodayKey() !== currentDateKey) { checkDayRollover(); return; }
-      const cabang = document.getElementById('cabang').value;
-      const jabatan = document.getElementById('jabatan').value;
-      if (!cabang || !jabatan) return;
-
-      clearTimeout(_saveTimer);
-      _saveTimer = setTimeout(async () => {
-        const data = {
-          cabang,
-          jabatan,
-          photos: currentPhotos,
-          skipped: currentSkipped,
-          kasirForm: jabatan === 'kasir' ? getKasirFormData() : null,
-          gudangForm: jabatan === 'gudang' ? getGudangFormData() : null,
-          updatedAt: new Date().toISOString()
-        };
-        try {
-          clearHeavyLocalStorage();
-          await idbSet(storageKey(cabang, jabatan), data);
-        } catch (e) {
-          console.warn('IDB save gagal', e);
-        }
-      }, 350);
+      if (currentDateKey && getTodayKey() !== currentDateKey) { checkDayRollover(); }
     }
 
     async function loadFromStorage(cabang, jabatan) {
-      const key = storageKey(cabang, jabatan);
-      try {
-        const fromIdb = await idbGet(key);
-        if (fromIdb) return fromIdb;
-      } catch (e) {
-        console.warn('IDB load gagal', e);
-      }
-      // fallback lama (localStorage) lalu pindahkan ke IDB
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        try { await idbSet(key, parsed); } catch (_) {}
-        try { localStorage.removeItem(key); } catch (_) {}
-        return parsed;
-      } catch {
-        return null;
-      }
+      return null; // tidak ada draft yang dimuat
     }
 
     // ========== UI ==========
@@ -2438,30 +2400,6 @@
       updateSendButton();
     }
 
-    async function saveDraft() {
-      const cabang = document.getElementById('cabang').value;
-      const jabatan = document.getElementById('jabatan').value;
-      if (!cabang || !jabatan) {
-        alert('Pilih cabang & jabatan dulu.');
-        return;
-      }
-      try {
-        clearHeavyLocalStorage();
-        await idbSet(storageKey(cabang, jabatan), {
-          cabang, jabatan,
-          photos: currentPhotos,
-          skipped: currentSkipped,
-          kasirForm: jabatan === 'kasir' ? getKasirFormData() : null,
-          gudangForm: jabatan === 'gudang' ? getGudangFormData() : null,
-          updatedAt: new Date().toISOString()
-        });
-        alert('Draft tersimpan di HP (IndexedDB).\nBuka lagi → pilih cabang & jabatan yang sama.');
-      } catch (e) {
-        console.warn(e);
-        alert('Gagal simpan draft.\nCoba: Chrome → setelan situs → hapus data, lalu isi ulang.\nFoto di layar ini masih bisa dikirim ke WA.');
-      }
-    }
-
     // ========== WA ==========
     function dataURLtoFile(dataUrl, filename) {
       try {
@@ -2678,13 +2616,11 @@
 
       const previewEl = document.getElementById('waPreviewText');
       if (previewEl) {
-        previewEl.textContent = msg + '\n\n' + files.length + ' foto siap.' + (((jabatan === 'kasir' || jabatan === 'gudang') && files.length > 1)
-          ? '\nTahap 1: foto pertama + teks laporan. Tahap 2: sisa foto tanpa teks.\nTekan tombol di bawah.'
-          : '\nTeks laporan dikirim di chat (tidak di foto).\nTekan tombol hijau di bawah.');
+        previewEl.textContent = msg + '\n\n' + files.length + ' foto siap.\nTekan tombol di bawah, pilih chat WhatsApp, lalu kirim sekali.';
       }
       const _fb = document.getElementById('waFallback'); if (_fb) _fb.style.display = 'none';
       const _bt = document.getElementById('btnDoShare');
-      if (_bt) _bt.textContent = ((jabatan === 'kasir' || jabatan === 'gudang') && files.length > 1) ? 'Kirim foto pertama + teks (tahap 1)' : 'Buka menu share';
+      if (_bt) _bt.textContent = 'Kirim ke WhatsApp';
       document.getElementById('modalWA').classList.add('show');
     }
 
@@ -2697,9 +2633,9 @@
       }
 
       const { files, text, cabang, jabatan } = payload;
-      // Kasir/Gudang: teks laporan hanya di FOTO PERTAMA (WhatsApp mengulang teks di semua foto
+      // Semua jabatan: teks laporan hanya di FOTO PERTAMA (WhatsApp mengulang teks di semua foto
       // kalau dikirim sekaligus). Jadi dikirim 2 tahap: (1) foto pertama + teks, (2) sisa foto tanpa teks.
-      const twoStep = (jabatan === 'kasir' || jabatan === 'gudang') && files.length > 1;
+      const twoStep = false; // 1x kirim saja: semua foto + teks sekaligus
       const step = payload.stage || 0;
       let shareFiles = files, shareText = text;
       if (twoStep) {
@@ -2901,8 +2837,8 @@
     currentDateKey = getTodayKey();
     document.getElementById('dateDisplay').textContent = formatDateID();
     try { purgeOldDrafts(); } catch (_) {}
-    try { purgeOldIDB(); } catch (_) {}
     try { clearHeavyLocalStorage(); } catch (_) {}
+    try { indexedDB.deleteDatabase('LTC_Drafts_v1'); } catch (_) {}
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDayRollover(); });
     window.addEventListener('focus', () => { checkDayRollover(); });
     window.addEventListener('pageshow', () => { checkDayRollover(); });
