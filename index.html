@@ -1173,6 +1173,17 @@
         <button type="button" class="btn btn-wa" id="btnDoShare" onclick="doShareNow()">Buka menu share</button>
         <button type="button" class="btn btn-secondary" onclick="closeModal()">Batal</button>
       </div>
+      <div id="waFallback" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border, #d9e2f2);">
+        <p style="font-size:.86rem;margin:0 0 4px;"><strong>Menu share gagal.</strong> Kirim manual lewat langkah ini:</p>
+        <p id="waFallbackErr" style="font-size:.74rem;opacity:.7;margin:0 0 10px;word-break:break-word;"></p>
+        <div class="btn-group">
+          <button type="button" class="btn btn-secondary" onclick="fbShareFiles()">1. Coba kirim foto saja</button>
+          <button type="button" class="btn btn-secondary" onclick="fbCopyText()">2. Salin teks laporan</button>
+          <button type="button" class="btn btn-secondary" onclick="fbSaveFotos()">3. Simpan foto ke HP</button>
+          <button type="button" class="btn btn-secondary" onclick="fbOpenWA()">4. Buka WhatsApp (isi teks)</button>
+          <button type="button" class="btn btn-secondary" onclick="fbMarkSent()">Sudah terkirim manual</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2663,12 +2674,17 @@
       }
 
       // Foto tetap asli (hanya timestamp dari kamera). Teks laporan hanya di chat WA.
-      window._sharePayload = { files, text: msg, cabang, jabatan };
+      window._sharePayload = { files, text: msg, cabang, jabatan, stage: 0 };
 
       const previewEl = document.getElementById('waPreviewText');
       if (previewEl) {
-        previewEl.textContent = msg + '\n\n' + files.length + ' foto siap.\nTeks laporan dikirim di chat (tidak di foto).\nTekan tombol hijau di bawah.';
+        previewEl.textContent = msg + '\n\n' + files.length + ' foto siap.' + (((jabatan === 'kasir' || jabatan === 'gudang') && files.length > 1)
+          ? '\nTahap 1: foto pertama + teks laporan. Tahap 2: sisa foto tanpa teks.\nTekan tombol di bawah.'
+          : '\nTeks laporan dikirim di chat (tidak di foto).\nTekan tombol hijau di bawah.');
       }
+      const _fb = document.getElementById('waFallback'); if (_fb) _fb.style.display = 'none';
+      const _bt = document.getElementById('btnDoShare');
+      if (_bt) _bt.textContent = ((jabatan === 'kasir' || jabatan === 'gudang') && files.length > 1) ? 'Kirim foto pertama + teks (tahap 1)' : 'Buka menu share';
       document.getElementById('modalWA').classList.add('show');
     }
 
@@ -2681,8 +2697,17 @@
       }
 
       const { files, text, cabang, jabatan } = payload;
-      const withText = { files, text };
-      const filesOnly = { files };
+      // Kasir/Gudang: teks laporan hanya di FOTO PERTAMA (WhatsApp mengulang teks di semua foto
+      // kalau dikirim sekaligus). Jadi dikirim 2 tahap: (1) foto pertama + teks, (2) sisa foto tanpa teks.
+      const twoStep = (jabatan === 'kasir' || jabatan === 'gudang') && files.length > 1;
+      const step = payload.stage || 0;
+      let shareFiles = files, shareText = text;
+      if (twoStep) {
+        if (step === 0) { shareFiles = [files[0]]; shareText = text; }
+        else { shareFiles = files.slice(1); shareText = ''; }
+      }
+      const withText = shareText ? { files: shareFiles, text: shareText } : { files: shareFiles };
+      const filesOnly = { files: shareFiles };
 
       let data = withText;
       try {
@@ -2697,33 +2722,97 @@
       } catch (_) {}
 
       navigator.share(data).then(() => {
-        closeModal();
-        markSent(cabang, jabatan);
-        updateProgress(jabatan);
-        const btn = document.getElementById('btnKirimWA');
-        if (btn) {
-          btn.innerHTML = ICON.check + 'Terkirim';
-          btn.className = 'btn btn-sent';
-          btn.disabled = true;
+        if (twoStep && step === 0) {
+          // Tahap 1 selesai → lanjut tahap 2 (butuh klik baru)
+          payload.stage = 1;
+          const pv = document.getElementById('waPreviewText');
+          if (pv) pv.textContent = 'Tahap 1 selesai (foto pertama + teks laporan).\n\nSekarang kirim sisa ' + (files.length - 1) + ' foto ke chat WhatsApp yang sama. Tekan tombol di bawah.';
+          const bt = document.getElementById('btnDoShare');
+          if (bt) bt.textContent = 'Kirim sisa ' + (files.length - 1) + ' foto (tahap 2)';
+          return;
         }
-        if (jabatan === 'kepala_unit') {
-          setTimeout(() => {
-            alert('Foto terkirim.\nKirim video body check manual ke chat yang sama.');
-          }, 300);
-        }
+        onShareSuccess(cabang, jabatan);
       }).catch((err) => {
         if (err && err.name === 'AbortError') return;
-        // Coba tanpa teks dalam gesture yang sama (jarang berhasil kalau sudah throw)
-        navigator.share(filesOnly).then(() => {
-          closeModal();
-          markSent(cabang, jabatan);
-          updateProgress(jabatan);
-        }).catch((err2) => {
-          if (err2 && err2.name === 'AbortError') return;
-          const d = (err && (err.name || err.message)) ? (err.name + ' ' + (err.message || '')) : 'unknown';
-          alert('Gagal share.\n\n' + d + '\n\nTips: kirim 1 foto dulu. Pastikan foto baru diambil (bukan dari draft lama).');
-        });
+        const d = (err && (err.name || err.message)) ? (err.name + ' ' + (err.message || '')) : 'unknown';
+        const mb = (files.reduce((a, f) => a + (f.size || 0), 0) / 1048576).toFixed(1);
+        const cv = (navigator.userAgent.match(/Chrome\/([\d.]+)/) || [])[1] || '?';
+        showShareFallback(d + ' · v2026.11.02-c · ' + files.length + ' foto · ' + mb + ' MB · Chrome ' + cv);
       });
+    }
+
+    function onShareSuccess(cabang, jabatan) {
+      closeModal();
+      markSent(cabang, jabatan);
+      updateProgress(jabatan);
+      const btn = document.getElementById('btnKirimWA');
+      if (btn) {
+        btn.innerHTML = ICON.check + 'Terkirim';
+        btn.className = 'btn btn-sent';
+        btn.disabled = true;
+      }
+      if (jabatan === 'kepala_unit') {
+        setTimeout(() => {
+          alert('Foto terkirim.\nKirim video body check manual ke chat yang sama.');
+        }, 300);
+      }
+    }
+
+    // ===== Mode cadangan kalau menu share Android gagal (mis. WhatsApp clone) =====
+    function showShareFallback(info) {
+      const fb = document.getElementById('waFallback');
+      const er = document.getElementById('waFallbackErr');
+      if (er) er.textContent = info || '';
+      if (fb) { fb.style.display = 'block'; try { fb.scrollIntoView({ block: 'nearest' }); } catch (_) {} }
+    }
+    function fbShareFiles() {
+      const pl = window._sharePayload;
+      if (!pl) return;
+      if (!navigator.share) { alert('Share tidak tersedia di browser ini.'); return; }
+      navigator.share({ files: pl.files }).then(() => onShareSuccess(pl.cabang, pl.jabatan)).catch((e) => {
+        if (e && e.name === 'AbortError') return;
+        showShareFallback((e && (e.name + ' ' + (e.message || ''))) + ' (kirim foto saja)');
+      });
+    }
+    async function fbCopyText() {
+      const pl = window._sharePayload;
+      if (!pl) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(pl.text);
+        } else { throw new Error('no clipboard'); }
+      } catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = pl.text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (__) {}
+        document.body.removeChild(ta);
+      }
+      showToast('Teks laporan disalin. Tempel di chat WhatsApp.');
+    }
+    function fbSaveFotos() {
+      const pl = window._sharePayload;
+      if (!pl) return;
+      pl.files.forEach((f, i) => {
+        setTimeout(() => {
+          const u = URL.createObjectURL(f);
+          const a = document.createElement('a');
+          a.href = u; a.download = pl.cabang + '_' + f.name;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(u), 4000);
+        }, i * 500);
+      });
+      showToast('Foto disimpan ke HP. Lampirkan dari galeri di WhatsApp.');
+    }
+    function fbOpenWA() {
+      const pl = window._sharePayload;
+      if (!pl) return;
+      window.open('https://wa.me/?text=' + encodeURIComponent(pl.text), '_blank');
+    }
+    function fbMarkSent() {
+      const pl = window._sharePayload;
+      if (!pl) return;
+      onShareSuccess(pl.cabang, pl.jabatan);
     }
 
     function prepareSendWA() { sendToWA(); }
