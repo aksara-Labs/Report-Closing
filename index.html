@@ -1828,8 +1828,8 @@
       return out;
     }
 
-    function sendToWA() {
-      // Langkah 1: siapkan file (boleh sync), tampilkan modal
+    async function sendToWA() {
+      // Langkah 1: siapkan file + stempel header di foto pertama, tampilkan modal
       // Langkah 2: user klik "Buka menu share" → doShareNow() = user gesture baru
       const cabang = document.getElementById('cabang').value;
       const jabatan = document.getElementById('jabatan').value;
@@ -1843,9 +1843,14 @@
       const label = JABATAN_LABEL[jabatan];
       const tanggal = formatDateID();
       const msg = `LAPORAN TUTUP CABANG\n${cabang} · ${label}\n${tanggal}`;
+      const headerLines = [
+        'LAPORAN TUTUP CABANG',
+        `${cabang} · ${label}`,
+        tanggal
+      ];
 
       const raw = collectOrderedFiles(jabatan);
-      const files = [];
+      let files = [];
       raw.forEach((f, i) => {
         if (!f) return;
         const t = f.type || '';
@@ -1866,11 +1871,19 @@
         return;
       }
 
+      // Tempel teks laporan di BAGIAN ATAS foto pertama
+      try {
+        const firstStamped = await burnHeaderOnFirstPhoto(files[0], headerLines);
+        files = [firstStamped, ...files.slice(1)];
+      } catch (e) {
+        console.warn('Gagal stempel header', e);
+      }
+
       window._sharePayload = { files, text: msg, cabang, jabatan };
 
       const previewEl = document.getElementById('waPreviewText');
       if (previewEl) {
-        previewEl.textContent = msg + '\n\n' + files.length + ' foto siap.\nTekan tombol hijau di bawah.';
+        previewEl.textContent = msg + '\n\n' + files.length + ' foto siap.\nTeks laporan sudah ditempel di atas foto pertama.\nTekan tombol hijau di bawah.';
       }
       document.getElementById('modalWA').classList.add('show');
     }
